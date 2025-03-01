@@ -426,8 +426,7 @@ GET /articles/1?include=author&fields[articles]=title,body-text&fields[users]=na
 
 #### Including Related Resources
 Include a single relationship:
-```
-GET /articles/1?include=author
+```GET /articles/1?include=author
 ```
 
 Include multiple relationships:
