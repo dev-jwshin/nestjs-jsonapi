@@ -1,0 +1,38 @@
+{
+  "name": "@foryourdev/nestjs-jsonapi",
+  "version": "1.0.2",
+  "description": "JSON:API package for NestJS",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "files": [
+    "dist"
+  ],
+  "author": "JunWon Shin <dev@foryourdev.com>",
+  "license": "MIT",
+  "scripts": {
+    "build": "rimraf dist && tsc -p tsconfig.build.json",
+    "format": "prettier --write \"src/**/*.ts\"",
+    "lint": "eslint \"src/**/*.ts\" --fix",
+    "test": "jest",
+    "test:watch": "jest --watch",
+    "test:cov": "jest --coverage"
+  },
+  "dependencies": {
+    "@nestjs/common": "^10.4.15",
+    "@nestjs/platform-express": "^10.4.15",
+    "@nestjs/typeorm": "^11.0.0",
+    "express": "^4.21.2",
+    "reflect-metadata": "^0.1.14",
+    "rxjs": "^7.8.2",
+    "typeorm": "^0.3.20"
+  },
+  "peerDependencies": {
+    "@nestjs/core": "^10.4.15"
+  },
+  "devDependencies": {
+    "@types/express": "^5.0.0",
+    "@types/node": "^22.13.5",
+    "rimraf": "^6.0.1",
+    "typescript": "^5.7.3"
+  }
+}
