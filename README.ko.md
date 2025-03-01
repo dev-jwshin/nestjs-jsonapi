@@ -750,6 +750,6 @@ MIT
 
 ## 문서화 및 기여
 
-더 자세한 정보와 API 문서는 [GitHub 저장소](https://github.com/foryourdev/nestjs-jsonapi)를 참조하세요.
+더 자세한 정보와 API 문서는 [GitHub 저장소](https://github.com/dev-jwshin/nestjs-jsonapi)를 참조하세요.
 
 이슈 및 풀 리퀘스트는 언제나 환영합니다! 

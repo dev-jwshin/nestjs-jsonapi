@@ -750,6 +750,6 @@ MIT
 
 ## Documentation and Contribution
 
-For more detailed information and API documentation, refer to the [GitHub repository](https://github.com/foryourdev/nestjs-jsonapi).
+For more detailed information and API documentation, refer to the [GitHub repository](https://github.com/dev-jwshin/nestjs-jsonapi).
 
 Issues and pull requests are always welcome! 
