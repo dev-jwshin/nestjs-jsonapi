@@ -96,11 +96,10 @@ async function wrapRepositoryMethod<T>(
   const filteredOptions = filterSerializerOptions(serializerOptions, options);
   
   // 쿼리 파라미터 빌드
-  // 필터는 컨트롤러 레벨에서 이미 필터링 되었으므로, 빈 배열로 설정하여 레포지토리 레벨에서 추가 필터링 방지
-  const { sorts, pagination } = buildQueryParams(filteredOptions);
-  const filters = []; // 빈 필터 배열 사용 - 컨트롤러 레벨에서만 필터링 적용
+  // 컨트롤러 레벨 필터링이 적용된 필터 사용 (AllowedFilters 데코레이터)
+  const { filters, sorts, pagination } = buildQueryParams(filteredOptions);
   
-  // 쿼리 옵션 생성 및 적용 (필터 없이)
+  // 쿼리 옵션 생성 및 적용 
   const queryOptions = createQueryOptions(args, filters, sorts, pagination);
   
   // 원래 메서드 호출 (수정된 옵션으로)
@@ -146,8 +145,9 @@ function applyFilters(queryOptions: any, filters: any[]): void {
       // 필터링 연산자에 따라 처리
       switch (filter.operator) {
         case 'eq':
-          // 문자열 필드의 경우 LIKE 검색 사용
+          // 문자열 필드의 경우 LIKE 검색 사용 - 한글 등 모든 문자 지원 개선
           if (typeof filter.value === 'string') {
+            // 부분 일치 검색으로 변경 - '%value%' 패턴 사용
             queryOptions.where[filter.field] = Like(`%${filter.value}%`);
           } else {
             queryOptions.where[filter.field] = filter.value;
@@ -212,9 +212,9 @@ function filterSerializerOptions(options: any, repositoryOptions: JsonApiReposit
   // 원본 옵션 복사
   const filteredOptions = { ...options };
   
-  // 레포지토리 수준의 필터링 비활성화
-  // 컨트롤러 레벨 필터링(@AllowedFilters 데코레이터)만 사용하도록 수정
-  // 기존 레포지토리 필터 제한 적용 코드 제거
+  // 필터 필드 처리 - 컨트롤러 레벨 필터만 허용하도록 설정
+  // 컨트롤러에서 이미 필터링된 필터를 그대로 사용 (레포지토리 수준의 추가 필터링 없음)
+  // 이렇게 하면 @AllowedFilters 데코레이터로 설정된 필터만 적용됨
   
   // 허용된 인클루드가 지정된 경우 (인클루드 필터링은 유지)
   if (repositoryOptions.allowedIncludes && filteredOptions.include) {

@@ -119,11 +119,17 @@ export class SerializerService {
     
     // 허용된 필터가 설정되어 있으면 필터링
     if (req['jsonapiAllowedFilters']) {
-      filters = this.filterAllowedFilters(filters, req['jsonapiAllowedFilters'] as string[]);
+      const allowedFilters = req['jsonapiAllowedFilters'] as string[];
+      filters = this.filterAllowedFilters(filters, allowedFilters);
+      
       // 필터가 없는 경우 필터 옵션 자체를 설정하지 않음
       if (Object.keys(filters).length === 0) {
         return;
       }
+      
+      // 콘솔에 허용된 필터 출력 (디버깅용)
+      console.log(`Allowed filters: ${allowedFilters.join(', ')}`);
+      console.log(`Applied filters:`, filters);
     }
     
     options.filter = filters;
