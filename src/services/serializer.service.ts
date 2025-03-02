@@ -120,13 +120,22 @@ export class SerializerService {
     // 허용된 필터가 설정되어 있으면 필터링
     if (req['jsonapiAllowedFilters']) {
       filters = this.filterAllowedFilters(filters, req['jsonapiAllowedFilters'] as string[]);
+      // 필터가 없는 경우 필터 옵션 자체를 설정하지 않음
+      if (Object.keys(filters).length === 0) {
+        return;
+      }
     }
     
     options.filter = filters;
   }
 
-  // 허용된 필터 필드만 유지
+  // 허용된 필터 필드만 유지 - 더 엄격하게 필터링
   private filterAllowedFilters(filters: Record<string, any>, allowedFilters: string[]): Record<string, any> {
+    // allowedFilters가 없으면 빈 객체 반환 (필터링 금지)
+    if (!allowedFilters || allowedFilters.length === 0) {
+      return {};
+    }
+    
     const filteredFilters = {};
     
     Object.keys(filters).forEach(key => {

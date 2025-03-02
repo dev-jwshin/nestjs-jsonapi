@@ -96,9 +96,11 @@ async function wrapRepositoryMethod<T>(
   const filteredOptions = filterSerializerOptions(serializerOptions, options);
   
   // 쿼리 파라미터 빌드
-  const { filters, sorts, pagination } = buildQueryParams(filteredOptions);
+  // 필터는 컨트롤러 레벨에서 이미 필터링 되었으므로, 빈 배열로 설정하여 레포지토리 레벨에서 추가 필터링 방지
+  const { sorts, pagination } = buildQueryParams(filteredOptions);
+  const filters = []; // 빈 필터 배열 사용 - 컨트롤러 레벨에서만 필터링 적용
   
-  // 쿼리 옵션 생성 및 적용
+  // 쿼리 옵션 생성 및 적용 (필터 없이)
   const queryOptions = createQueryOptions(args, filters, sorts, pagination);
   
   // 원래 메서드 호출 (수정된 옵션으로)
@@ -210,23 +212,11 @@ function filterSerializerOptions(options: any, repositoryOptions: JsonApiReposit
   // 원본 옵션 복사
   const filteredOptions = { ...options };
   
-  // 허용된 필터가 지정된 경우
-  if (repositoryOptions.allowedFilters && filteredOptions.filter) {
-    const allowedFilters = repositoryOptions.allowedFilters;
-    const originalFilter = filteredOptions.filter;
-    const filteredFilter = {};
-    
-    // 허용된 필터 필드만 유지
-    Object.keys(originalFilter).forEach(key => {
-      if (allowedFilters.includes(key)) {
-        filteredFilter[key] = originalFilter[key];
-      }
-    });
-    
-    filteredOptions.filter = filteredFilter;
-  }
+  // 레포지토리 수준의 필터링 비활성화
+  // 컨트롤러 레벨 필터링(@AllowedFilters 데코레이터)만 사용하도록 수정
+  // 기존 레포지토리 필터 제한 적용 코드 제거
   
-  // 허용된 인클루드가 지정된 경우
+  // 허용된 인클루드가 지정된 경우 (인클루드 필터링은 유지)
   if (repositoryOptions.allowedIncludes && filteredOptions.include) {
     const allowedIncludes = repositoryOptions.allowedIncludes;
     const originalIncludes = Array.isArray(filteredOptions.include) 
