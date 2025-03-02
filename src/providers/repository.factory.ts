@@ -4,6 +4,7 @@ import { getDataSourceToken, getRepositoryToken } from '@nestjs/typeorm';
 import { SerializerService } from '../services/serializer.service';
 import { buildQueryParams } from '../interfaces/query-builder.interface';
 import { EntityClassOrSchema } from '@nestjs/typeorm/dist/interfaces/entity-class-or-schema.type';
+import { Like, MoreThan, MoreThanOrEqual, LessThan, LessThanOrEqual, Not } from 'typeorm';
 
 /**
  * Repository 설정 옵션 인터페이스
@@ -136,11 +137,41 @@ function applyFilters(queryOptions: any, filters: any[]): void {
   
   queryOptions.where = queryOptions.where || {};
   
-  // 단순 필터만 지원 (eq 연산자)
+  // 필터링 조건 적용
   filters.forEach(filter => {
-    if (filter.operator === 'eq') {
-      if (typeof queryOptions.where === 'object' && !Array.isArray(queryOptions.where)) {
-        queryOptions.where[filter.field] = filter.value;
+    // 이미 where 조건이 존재하는지 확인
+    if (typeof queryOptions.where === 'object' && !Array.isArray(queryOptions.where)) {
+      // 필터링 연산자에 따라 처리
+      switch (filter.operator) {
+        case 'eq':
+          // 문자열 필드의 경우 LIKE 검색 사용
+          if (typeof filter.value === 'string') {
+            queryOptions.where[filter.field] = Like(`%${filter.value}%`);
+          } else {
+            queryOptions.where[filter.field] = filter.value;
+          }
+          break;
+        case 'like':
+          queryOptions.where[filter.field] = Like(`%${filter.value}%`);
+          break;
+        case 'gt':
+          queryOptions.where[filter.field] = MoreThan(filter.value);
+          break;
+        case 'gte':
+          queryOptions.where[filter.field] = MoreThanOrEqual(filter.value);
+          break;
+        case 'lt':
+          queryOptions.where[filter.field] = LessThan(filter.value);
+          break;
+        case 'lte':
+          queryOptions.where[filter.field] = LessThanOrEqual(filter.value);
+          break;
+        case 'ne':
+          queryOptions.where[filter.field] = Not(filter.value);
+          break;
+        // 기타 연산자 처리도 추가 가능
+        default:
+          queryOptions.where[filter.field] = filter.value;
       }
     }
   });

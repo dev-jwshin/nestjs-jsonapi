@@ -75,69 +75,57 @@ export interface QueryBuilderInterface {
  * SerializerOptions에서 쿼리 빌더 매개변수 추출
  */
 export function buildQueryParams(options: SerializerOptions): {
-  filters: QueryFilter[];
-  sorts: QuerySort[];
-  pagination: QueryPagination;
+  filters: Array<{ field: string; operator: string; value: any }>;
+  sorts: Array<{ field: string; direction: string }>;
+  pagination: { page?: number; perPage?: number };
 } {
-  const filters: QueryFilter[] = [];
-  const sorts: QuerySort[] = [];
-  const pagination: QueryPagination = {};
+  const result = {
+    filters: [],
+    sorts: [],
+    pagination: {}
+  };
 
-  // 필터링 파라미터 처리
-  if (options.filter) {
+  // 필터 처리
+  if (options.filter && Object.keys(options.filter).length > 0) {
     Object.entries(options.filter).forEach(([field, value]) => {
+      // 단순 값 (filter[name]=value)
       if (typeof value !== 'object') {
-        // 단순 필터 (필드=값)
-        filters.push({
+        result.filters.push({
           field,
           operator: 'eq',
-          value,
+          value
         });
-      } else {
-        // 연산자 기반 필터
-        Object.entries(value).forEach(([operator, operandValue]) => {
-          filters.push({
+      } 
+      // 연산자가 있는 필터 (filter[name][eq]=value)
+      else {
+        Object.entries(value).forEach(([operator, operand]) => {
+          result.filters.push({
             field,
-            operator: operator as any,
-            value: operandValue,
+            operator,
+            value: operand
           });
         });
       }
     });
   }
 
-  // 정렬 파라미터 처리
-  if (options.sort) {
-    options.sort.forEach((sort) => {
-      sorts.push({
-        field: sort.field,
-        direction: sort.direction,
-      });
-    });
+  // 정렬 처리
+  if (options.sort && options.sort.length > 0) {
+    result.sorts = options.sort.map(sort => ({
+      field: sort.field,
+      direction: sort.direction
+    }));
   }
 
-  // 페이지네이션 파라미터 처리
+  // 페이지네이션 처리
   if (options.pagination) {
-    // 오프셋 기반 페이지네이션
     if (options.pagination.number !== undefined && options.pagination.size !== undefined) {
-      pagination.page = options.pagination.number;
-      pagination.perPage = options.pagination.size;
-    }
-    // 커서 기반 페이지네이션
-    else if (options.pagination.after || options.pagination.before) {
-      pagination.cursorField = 'id'; // 기본값으로 id 사용
-      
-      if (options.pagination.after) {
-        const [type, id] = options.pagination.after.split(':');
-        pagination.afterCursor = id;
-      }
-      
-      if (options.pagination.before) {
-        const [type, id] = options.pagination.before.split(':');
-        pagination.beforeCursor = id;
-      }
+      result.pagination = {
+        page: options.pagination.number,
+        perPage: options.pagination.size
+      };
     }
   }
 
-  return { filters, sorts, pagination };
+  return result;
 } 

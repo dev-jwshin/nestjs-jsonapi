@@ -299,8 +299,17 @@ export class SerializerService {
     return data.filter(item => {
       // 모든 필터 조건을 검사
       return Object.entries(filters).every(([key, value]) => {
+        // 필터 필드가 없는 경우 해당 필터는 무시
+        if (item[key] === undefined) {
+          return true;
+        }
+        
         // 단순 필터 (filter[name]=value)
         if (typeof value !== 'object') {
+          // 문자열 값은 대소문자 구분 없이 부분 일치 검색
+          if (typeof item[key] === 'string' && typeof value === 'string') {
+            return item[key].toLowerCase().includes(value.toLowerCase());
+          }
           return item[key] === value;
         }
         
@@ -319,8 +328,11 @@ export class SerializerService {
             case 'nin': return Array.isArray(operand) ? 
               !operand.includes(item[key]) : 
               !String(operand).split(',').includes(String(item[key]));
-            case 'like': return typeof item[key] === 'string' && 
-              item[key].includes(String(operand));
+            case 'like': 
+              if (typeof item[key] === 'string' && typeof operand === 'string') {
+                return item[key].toLowerCase().includes(operand.toLowerCase());
+              }
+              return false;
             default: return true;
           }
         });
