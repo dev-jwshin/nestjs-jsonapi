@@ -19,7 +19,7 @@ A comprehensive NestJS package for implementing [JSON:API](https://jsonapi.org/)
 ## Installation
 
 ```bash
-npm install @foryourdev/nestjs-jsonapi
+npm install @foryourdev/nestjs-jsonapi@latest
 ```
 
 ## Quick Start
