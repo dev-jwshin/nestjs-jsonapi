@@ -12,6 +12,7 @@ import { TypeOrmQueryBuilderService } from './services/typeorm-query-builder.ser
 import { createJsonApiRepositoryProvider, JsonApiRepositoryOptions } from './providers/repository.factory';
 import { EntityClassOrSchema } from '@nestjs/typeorm/dist/interfaces/entity-class-or-schema.type';
 import { ModuleRef } from '@nestjs/core';
+import { Reflector } from '@nestjs/core';
 
 /**
  * 엔티티별 JSON:API 옵션 인터페이스
@@ -58,12 +59,27 @@ export interface JsonApiModuleOptions {
     SerializerService,
     TypeOrmQueryBuilderService,
     {
-      provide: APP_INTERCEPTOR,
-      useClass: JSONAPIResponseInterceptor,
+      provide: 'JSONAPI_MODULE_OPTIONS',
+      useValue: {
+        pagination: {
+          enabled: true,
+          size: 10
+        }
+      }
     },
     {
       provide: APP_INTERCEPTOR,
-      useClass: FiltersIncludesInterceptor,
+      useFactory: (moduleRef: ModuleRef, moduleOptions: any) => {
+        return new JSONAPIResponseInterceptor(moduleRef, moduleOptions);
+      },
+      inject: [ModuleRef, 'JSONAPI_MODULE_OPTIONS']
+    },
+    {
+      provide: APP_INTERCEPTOR,
+      useFactory: (reflector: Reflector) => {
+        return new FiltersIncludesInterceptor(reflector);
+      },
+      inject: [Reflector]
     },
   ],
   exports: [
