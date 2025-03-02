@@ -5,6 +5,7 @@ import { SerializerService } from '../services/serializer.service';
 import { buildQueryParams } from '../interfaces/query-builder.interface';
 import { EntityClassOrSchema } from '@nestjs/typeorm/dist/interfaces/entity-class-or-schema.type';
 import { Like, MoreThan, MoreThanOrEqual, LessThan, LessThanOrEqual, Not } from 'typeorm';
+import { RequestContextService } from '../services/request-context.service';
 
 /**
  * 모든 Repository 메서드 호출을 인터셉트하여 JSON:API 쿼리 파라미터를 자동으로 적용하는 팩토리
@@ -16,8 +17,8 @@ export function createJsonApiRepositoryProvider<T extends ObjectLiteral>(
 ): FactoryProvider {
   return {
     provide: getRepositoryToken(entity),
-    inject: [getDataSourceToken(), SerializerService],
-    useFactory: (dataSource: DataSource, serializerService: SerializerService) => {
+    inject: [getDataSourceToken(), SerializerService, RequestContextService],
+    useFactory: (dataSource: DataSource, serializerService: SerializerService, requestContextService: RequestContextService) => {
       const baseRepository = dataSource.getRepository<T>(entity);
       
       // 메서드 호출을 가로챌 프록시 생성
@@ -26,11 +27,22 @@ export function createJsonApiRepositoryProvider<T extends ObjectLiteral>(
           const originalValue = Reflect.get(target, prop, receiver);
           
           // 인터셉트할 메서드 목록
-          const methodsToWrap = ['find', 'findAndCount', 'findOne', 'count'];
+          const methodsToWrap = [
+            'find', 
+            'findAndCount', 
+            'findOne', 
+            'count', 
+            'findBy', 
+            'findOneBy', 
+            'findOneByOrFail', 
+            'findAndCountBy', 
+            'countBy',
+            'createQueryBuilder'
+          ];
           
           if (typeof originalValue === 'function' && methodsToWrap.includes(prop as string)) {
             return async function(...args: any[]) {
-              return wrapRepositoryMethod(originalValue, target, args, serializerService);
+              return wrapRepositoryMethod(originalValue, target, args, serializerService, requestContextService);
             };
           }
           
@@ -48,12 +60,31 @@ async function wrapRepositoryMethod<T>(
   originalMethod: Function, 
   target: Repository<T>, 
   args: any[],
-  serializerService: SerializerService
+  serializerService: SerializerService,
+  requestContextService: RequestContextService
 ) {
   // JSON:API 쿼리 파라미터 가져오기
   const serializerOptions = serializerService.getAutoOptions();
   
-  // 허용된 필터와 인클루드로 옵션 필터링 제거
+  // 현재 요청 컨텍스트 가져오기
+  const request = requestContextService.get();
+  
+  // 요청 객체에 설정된 허용된 필터 가져오기
+  const allowedFilters = request && request['jsonapiAllowedFilters'];
+  
+  // 필터 제한이 설정된 경우 필터 적용
+  if (allowedFilters && serializerOptions.filter) {
+    const filteredFilters = {};
+    
+    Object.keys(serializerOptions.filter).forEach(key => {
+      if (allowedFilters.includes(key)) {
+        filteredFilters[key] = serializerOptions.filter[key];
+      }
+    });
+    
+    // 필터링된 필터로 교체
+    serializerOptions.filter = filteredFilters;
+  }
   
   // 쿼리 파라미터 빌드 - 컨트롤러 레벨 필터링만 적용
   const { filters, sorts, pagination } = buildQueryParams(serializerOptions);
