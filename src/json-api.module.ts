@@ -11,6 +11,7 @@ import { FiltersIncludesInterceptor } from './interceptors/filters-includes.inte
 import { TypeOrmQueryBuilderService } from './services/typeorm-query-builder.service';
 import { createJsonApiRepositoryProvider, JsonApiRepositoryOptions } from './providers/repository.factory';
 import { EntityClassOrSchema } from '@nestjs/typeorm/dist/interfaces/entity-class-or-schema.type';
+import { ModuleRef } from '@nestjs/core';
 
 /**
  * 엔티티별 JSON:API 옵션 인터페이스
@@ -58,7 +59,11 @@ export interface JsonApiModuleOptions {
     TypeOrmQueryBuilderService,
     {
       provide: APP_INTERCEPTOR,
-      useClass: JSONAPIResponseInterceptor,
+      useFactory: (moduleRef: ModuleRef, moduleOptions?: any) => {
+        const interceptor = new JSONAPIResponseInterceptor(moduleRef, moduleOptions);
+        return interceptor;
+      },
+      inject: [ModuleRef, { token: 'JSONAPI_MODULE_OPTIONS', optional: true }]
     },
     {
       provide: APP_INTERCEPTOR,

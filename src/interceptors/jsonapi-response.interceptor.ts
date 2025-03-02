@@ -5,25 +5,52 @@ import { Reflector } from '@nestjs/core';
 import { SerializerService } from '../services/serializer.service';
 import { JSONAPI_RESPONSE_SERIALIZER } from '../decorators/response.decorator';
 import { SerializerOptions } from '../interfaces/serializer.interface';
+import { ModuleRef } from '@nestjs/core';
 
 @Injectable()
 export class JSONAPIResponseInterceptor implements NestInterceptor {
+  private reflector: Reflector;
+  private serializerService: SerializerService;
+  private moduleOptions: any;
+  private _hasAttemptedLoading: boolean = false;
+
   constructor(
-    private readonly reflector: Reflector,
-    private readonly serializerService: SerializerService,
-    @Optional() @Inject('JSONAPI_MODULE_OPTIONS') private readonly moduleOptions?: any,
+    @Optional() private readonly moduleRef?: ModuleRef,
+    @Optional() @Inject('JSONAPI_MODULE_OPTIONS') moduleOptions?: any,
   ) {
-    // reflector와 serializerService가 주입되었는지 확인
-    if (!this.reflector) {
-      console.error('Reflector가 주입되지 않았습니다. JSON:API 인터셉터가 제대로 작동하지 않을 수 있습니다.');
-    }
+    this.moduleOptions = moduleOptions || {};
     
-    if (!this.serializerService) {
-      console.error('SerializerService가 주입되지 않았습니다. JSON:API 인터셉터가 제대로 작동하지 않을 수 있습니다.');
+    // 모듈이 초기화된 후 서비스 인스턴스 가져오기
+    if (this.moduleRef) {
+      setTimeout(() => {
+        try {
+          this.reflector = this.moduleRef.get(Reflector, { strict: false });
+          this.serializerService = this.moduleRef.get(SerializerService, { strict: false });
+          
+          if (!this.reflector) {
+            console.error('Reflector를 ModuleRef에서 찾을 수 없습니다.');
+            this.logModuleSetupInstructions();
+          }
+          
+          if (!this.serializerService) {
+            console.error('SerializerService를 ModuleRef에서 찾을 수 없습니다.');
+            this.logModuleSetupInstructions();
+          }
+        } catch (error) {
+          console.error('의존성 확인 중 오류 발생:', error);
+          this.logModuleSetupInstructions();
+        }
+      }, 0);
+    } else {
+      console.error('ModuleRef가 주입되지 않았습니다. NestJS 모듈이 올바르게 설정되었는지 확인하세요.');
+      this.logModuleSetupInstructions();
     }
   }
 
   intercept(context: ExecutionContext, next: CallHandler): Observable<any> {
+    // 인터셉터 실행 시마다 의존성 확인
+    this.ensureDependencies();
+    
     return next.handle().pipe(
       map(data => {
         try {
@@ -34,6 +61,39 @@ export class JSONAPIResponseInterceptor implements NestInterceptor {
         }
       })
     );
+  }
+
+  /**
+   * 필요한 의존성이 모두 로드되었는지 확인하고 필요한 경우 로드 시도
+   */
+  private ensureDependencies(): void {
+    try {
+      // 첫 실행 시에만 의존성 로딩 시도 (로그 제한)
+      const shouldLog = !this._hasAttemptedLoading;
+      this._hasAttemptedLoading = true;
+      
+      if (!this.reflector && this.moduleRef) {
+        try {
+          if (shouldLog) console.log('Reflector 가져오기 시도 중...');
+          this.reflector = this.moduleRef.get(Reflector, { strict: false });
+          if (this.reflector && shouldLog) console.log('Reflector 로드 성공!');
+        } catch (error) {
+          if (shouldLog) console.error('Reflector 로드 실패:', error);
+        }
+      }
+      
+      if (!this.serializerService && this.moduleRef) {
+        try {
+          if (shouldLog) console.log('SerializerService 가져오기 시도 중...');
+          this.serializerService = this.moduleRef.get(SerializerService, { strict: false });
+          if (this.serializerService && shouldLog) console.log('SerializerService 로드 성공!');
+        } catch (error) {
+          if (shouldLog) console.error('SerializerService 로드 실패:', error);
+        }
+      }
+    } catch (error) {
+      console.error('의존성 확인 중 예상치 못한 오류 발생:', error);
+    }
   }
 
   /**
@@ -76,9 +136,19 @@ export class JSONAPIResponseInterceptor implements NestInterceptor {
         serializerOptions.request = request;
       }
 
-      // serializerService가 정의되어 있는지 확인
+      // serializerService가 없으면 가져오기 시도
+      if (!this.serializerService && this.moduleRef) {
+        try {
+          console.log('SerializerService를 동적으로 가져오는 중...');
+          this.serializerService = this.moduleRef.get(SerializerService, { strict: false });
+        } catch (error) {
+          console.error('SerializerService 동적 로드 실패:', error);
+        }
+      }
+      
+      // 여전히 serializerService가 정의되어 있지 않으면 원본 데이터 반환
       if (!this.serializerService) {
-        console.error('serializerService가 정의되지 않았습니다.');
+        console.error('serializerService가 정의되지 않았습니다. 직렬화를 적용할 수 없습니다.');
         return data;
       }
 
@@ -159,38 +229,68 @@ export class JSONAPIResponseInterceptor implements NestInterceptor {
    */
   private getSerializerOptions(context: ExecutionContext): any {
     try {
-      // reflector가 없으면 null 반환
-      if (!this.reflector) {
-        console.warn('JSON:API reflector가 정의되지 않았습니다.');
-        return null;
-      }
-
-      try {
-        // 컨트롤러 메서드에서 메타데이터 가져오기
-        const handler = context.getHandler();
-        const cls = context.getClass();
-        
-        if (!handler || !cls) {
-          console.warn('컨트롤러 핸들러 또는 클래스를 가져올 수 없습니다.');
-          return null;
+      // reflector가 초기화될 때까지 잠시 대기 (최대 5번 시도)
+      let retries = 0;
+      const maxRetries = 5;
+      let result = null;
+      
+      while (!result && retries < maxRetries) {
+        if (!this.reflector) {
+          console.warn(`JSON:API reflector 초기화 대기 중... (시도 ${retries + 1}/${maxRetries})`);
+          
+          // 동기적 처리를 위한 즉시 실행 함수
+          (() => {
+            try {
+              // 모듈 참조가 있으면 직접 가져오기 시도
+              if (this.moduleRef) {
+                this.reflector = this.moduleRef.get(Reflector, { strict: false });
+              }
+            } catch (e) {
+              console.warn('Reflector 가져오기 시도 중 오류:', e);
+            }
+          })();
+          
+          retries++;
+          
+          // 여전히 reflector가 없으면 null 반환
+          if (!this.reflector && retries >= maxRetries) {
+            console.error('JSON:API reflector를 초기화할 수 없습니다. 직렬화 적용이 불가능합니다.');
+            return null;
+          }
+          
+          continue;
         }
         
-        const methodOptions = this.reflector.get(
-          JSONAPI_RESPONSE_SERIALIZER,
-          handler,
-        );
+        try {
+          // 컨트롤러 메서드에서 메타데이터 가져오기
+          const handler = context.getHandler();
+          const cls = context.getClass();
+          
+          if (!handler || !cls) {
+            console.warn('컨트롤러 핸들러 또는 클래스를 가져올 수 없습니다.');
+            return null;
+          }
+          
+          const methodOptions = this.reflector.get(
+            JSONAPI_RESPONSE_SERIALIZER,
+            handler,
+          );
 
-        // 컨트롤러 클래스에서 메타데이터 가져오기 (메서드에 없는 경우)
-        const classOptions = this.reflector.get(
-          JSONAPI_RESPONSE_SERIALIZER,
-          cls,
-        );
+          // 컨트롤러 클래스에서 메타데이터 가져오기 (메서드에 없는 경우)
+          const classOptions = this.reflector.get(
+            JSONAPI_RESPONSE_SERIALIZER,
+            cls,
+          );
 
-        return methodOptions || classOptions;
-      } catch (error) {
-        console.warn('JSON:API 메타데이터 가져오기 실패:', error);
-        return null;
+          result = methodOptions || classOptions;
+          break;
+        } catch (error) {
+          console.warn('JSON:API 메타데이터 가져오기 실패:', error);
+          retries++;
+        }
       }
+      
+      return result;
     } catch (error) {
       console.error('JSON:API 직렬화 옵션 가져오기 실패:', error);
       return null;
@@ -348,5 +448,50 @@ export class JSONAPIResponseInterceptor implements NestInterceptor {
       console.warn('기본 리소스 객체 생성 실패:', error);
       return { id: '0', type: 'unknown', attributes: {} };
     }
+  }
+
+  /**
+   * 올바른 모듈 설정 방법을 로그로 출력
+   */
+  private logModuleSetupInstructions(): void {
+    console.log('\n=== JSON API 모듈 설정 안내 ===');
+    console.log('1. 애플리케이션 모듈에 JsonApiModule을 다음과 같이 등록하세요:');
+    console.log(`
+      import { Module } from '@nestjs/common';
+      import { JsonApiModule } from '@foryourdev/nestjs-jsonapi';
+      
+      @Module({
+        imports: [
+          JsonApiModule.forRoot({
+            pagination: { enabled: true, size: 10 }
+          }),
+          // 다른 모듈...
+        ],
+      })
+      export class AppModule {}
+    `);
+    console.log('\n2. tsconfig.json에 다음 컴파일러 옵션이 있는지 확인하세요:');
+    console.log(`
+      "compilerOptions": {
+        "emitDecoratorMetadata": true,
+        "experimentalDecorators": true,
+        // 기타 옵션...
+      }
+    `);
+    console.log('\n3. 컨트롤러에서 올바르게 데코레이터를 사용하고 있는지 확인하세요:');
+    console.log(`
+      import { JSONAPIResponse } from '@foryourdev/nestjs-jsonapi';
+      import { UserSerializer } from './user.serializer';
+      
+      @Controller('users')
+      export class UserController {
+        @Get()
+        @JSONAPIResponse(UserSerializer)
+        findAll() {
+          // ...
+        }
+      }
+    `);
+    console.log('=== 설정 안내 종료 ===\n');
   }
 } 
