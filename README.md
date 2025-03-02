@@ -3,7 +3,6 @@
 A comprehensive NestJS package for implementing [JSON:API](https://jsonapi.org/) specification compliant APIs with TypeORM integration.
 
 [![npm version](https://badge.fury.io/js/%40foryourdev%2Fnestjs-jsonapi.svg)](https://badge.fury.io/js/%40foryourdev%2Fnestjs-jsonapi)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
 ## Features
 
