@@ -795,4 +795,70 @@ MIT
 
 For more detailed information and API documentation, refer to the [GitHub repository](https://github.com/dev-jwshin/nestjs-jsonapi).
 
-Issues and pull requests are always welcome! 
+Issues and pull requests are always welcome!
+
+## 테스트 환경 설정
+
+Jest와 Supertest를 사용하여 테스트할 때 다음 설정을 따르세요:
+
+```typescript
+import { Test } from '@nestjs/testing';
+import * as request from 'supertest';
+import { INestApplication } from '@nestjs/common';
+import { JsonApiModule } from './path-to-jsonapi-package';
+
+describe('Filter Tests', () => {
+  let app: INestApplication;
+
+  beforeAll(async () => {
+    const moduleRef = await Test.createTestingModule({
+      imports: [
+        // 필요한 모든 모듈 가져오기
+        JsonApiModule.forRoot(),
+        JsonApiModule.forFeature([
+          { 
+            entity: YourEntity, 
+            options: { 
+              allowedFilters: ['name', 'status'], 
+              allowedIncludes: ['relation1', 'relation2'] 
+            } 
+          }
+        ]),
+        // ... 다른 필요한 모듈들
+      ],
+    }).compile();
+
+    app = moduleRef.createNestApplication();
+    
+    // 중요: 실제 애플리케이션과 동일한 설정을 적용해야 합니다
+    // 모든 파이프, 필터, 미들웨어 등록
+    
+    await app.init();
+  });
+
+  it('필터가 적용되는지 테스트', () => {
+    return request(app.getHttpServer())
+      .get('/your-endpoint?filter[name]=test')
+      .expect(200)
+      .expect(res => {
+        // 필터링 결과 검증
+        expect(res.body.data.length).toBeGreaterThanOrEqual(0);
+        // 모든 결과가 필터 조건을 충족하는지 확인
+        res.body.data.forEach(item => {
+          expect(item.attributes.name).toContain('test');
+        });
+      });
+  });
+
+  afterAll(async () => {
+    await app.close();
+  });
+});
+```
+
+### 테스트에서 주의할 점
+
+1. 테스트 모듈에 `JsonApiModule`을 정확히 포함하세요.
+2. 테스트하려는 엔티티에 대해 `allowedFilters`와 `allowedIncludes`를 명시적으로 설정하세요.
+3. 실제 앱과 동일한 글로벌 파이프, 필터, 인터셉터를 테스트 앱에도 적용하세요.
+4. 테스트에서 사용하는 데이터베이스 연결 설정이 올바른지 확인하세요.
