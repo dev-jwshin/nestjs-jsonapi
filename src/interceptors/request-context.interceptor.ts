@@ -8,7 +8,6 @@ export class RequestContextInterceptor implements NestInterceptor {
 
   intercept(context: ExecutionContext, next: CallHandler): Observable<any> {
     const request = context.switchToHttp().getRequest();
-    console.log('[REQUEST_CONTEXT_INTERCEPTOR] Setting request context with query:', request.query);
     this.requestContextService.set(request);
     return next.handle();
   }
