@@ -126,18 +126,14 @@ export class SerializerService {
       if (Object.keys(filters).length === 0) {
         return;
       }
-      
-      // 콘솔에 허용된 필터 출력 (디버깅용)
-      console.log(`Allowed filters: ${allowedFilters.join(', ')}`);
-      console.log(`Applied filters:`, filters);
     }
     
     options.filter = filters;
   }
 
-  // 허용된 필터 필드만 유지 - 더 엄격하게 필터링
+  // 허용된 필터 필드만 유지
   private filterAllowedFilters(filters: Record<string, any>, allowedFilters: string[]): Record<string, any> {
-    // allowedFilters가 없으면 빈 객체 반환 (필터링 금지)
+    // allowedFilters가 없으면 빈 객체 반환
     if (!allowedFilters || allowedFilters.length === 0) {
       return {};
     }

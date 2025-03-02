@@ -37,41 +37,22 @@ export function createJsonApiRepositoryProvider<T extends ObjectLiteral>(
     provide: getRepositoryToken(entity),
     inject: [getDataSourceToken(), SerializerService],
     useFactory: (dataSource: DataSource, serializerService: SerializerService) => {
-      // 기본 Repository 생성
       const baseRepository = dataSource.getRepository<T>(entity);
       
-      // 프록시 객체 생성
+      // 메서드 호출을 가로챌 프록시 생성
       return new Proxy(baseRepository, {
-        // 메서드 호출 가로채기
         get(target: Repository<T>, prop: string | symbol, receiver: any) {
-          // 원래 속성/메서드 가져오기
           const originalValue = Reflect.get(target, prop, receiver);
           
-          // 가로챌 메서드인지 확인
-          if (prop === 'find' && typeof originalValue === 'function') {
-            // find 메서드 래핑
-            return async function(...args: any[]) {
-              return wrapRepositoryMethod(originalValue, target, args, serializerService, options);
-            };
-          } 
-          // findAndCount 메서드도 동일하게 처리
-          else if (prop === 'findAndCount' && typeof originalValue === 'function') {
-            return async function(...args: any[]) {
-              return wrapRepositoryMethod(originalValue, target, args, serializerService, options);
-            };
-          }
-          else if (prop === 'findOne' && typeof originalValue === 'function') {
-            return async function(...args: any[]) {
-              return wrapRepositoryMethod(originalValue, target, args, serializerService, options);
-            };
-          }
-          else if (prop === 'count' && typeof originalValue === 'function') {
+          // 인터셉트할 메서드 목록
+          const methodsToWrap = ['find', 'findAndCount', 'findOne', 'count'];
+          
+          if (typeof originalValue === 'function' && methodsToWrap.includes(prop as string)) {
             return async function(...args: any[]) {
               return wrapRepositoryMethod(originalValue, target, args, serializerService, options);
             };
           }
           
-          // 다른 메서드/속성은 원래대로 반환
           return originalValue;
         }
       });
@@ -95,14 +76,13 @@ async function wrapRepositoryMethod<T>(
   // 허용된 필터와 인클루드로 옵션 필터링
   const filteredOptions = filterSerializerOptions(serializerOptions, options);
   
-  // 쿼리 파라미터 빌드
-  // 컨트롤러 레벨 필터링이 적용된 필터 사용 (AllowedFilters 데코레이터)
+  // 쿼리 파라미터 빌드 - 컨트롤러 레벨 필터링 적용
   const { filters, sorts, pagination } = buildQueryParams(filteredOptions);
   
-  // 쿼리 옵션 생성 및 적용 
+  // 쿼리 옵션 생성 및 적용
   const queryOptions = createQueryOptions(args, filters, sorts, pagination);
   
-  // 원래 메서드 호출 (수정된 옵션으로)
+  // 원래 메서드 호출
   return originalMethod.apply(target, queryOptions ? [queryOptions] : args);
 }
 
@@ -115,16 +95,10 @@ function createQueryOptions(
   sorts: any[], 
   pagination: any
 ): any {
-  // 기본 옵션 (인자가 있으면 첫 번째 인자 사용)
   const queryOptions = args.length > 0 ? { ...args[0] } : {};
   
-  // 필터 적용
   applyFilters(queryOptions, filters);
-  
-  // 정렬 적용
   applySorting(queryOptions, sorts);
-  
-  // 페이지네이션 적용
   applyPagination(queryOptions, pagination);
   
   return queryOptions;
@@ -138,16 +112,11 @@ function applyFilters(queryOptions: any, filters: any[]): void {
   
   queryOptions.where = queryOptions.where || {};
   
-  // 필터링 조건 적용
   filters.forEach(filter => {
-    // 이미 where 조건이 존재하는지 확인
     if (typeof queryOptions.where === 'object' && !Array.isArray(queryOptions.where)) {
-      // 필터링 연산자에 따라 처리
       switch (filter.operator) {
         case 'eq':
-          // 문자열 필드의 경우 LIKE 검색 사용 - 한글 등 모든 문자 지원 개선
           if (typeof filter.value === 'string') {
-            // 부분 일치 검색으로 변경 - '%value%' 패턴 사용
             queryOptions.where[filter.field] = Like(`%${filter.value}%`);
           } else {
             queryOptions.where[filter.field] = filter.value;
@@ -171,7 +140,6 @@ function applyFilters(queryOptions: any, filters: any[]): void {
         case 'ne':
           queryOptions.where[filter.field] = Not(filter.value);
           break;
-        // 기타 연산자 처리도 추가 가능
         default:
           queryOptions.where[filter.field] = filter.value;
       }
@@ -204,34 +172,24 @@ function applyPagination(queryOptions: any, pagination: any): void {
 
 /**
  * SerializerOptions에서 허용된 필터와 인클루드만 추출
- * @param options 원본 SerializerOptions
- * @param repositoryOptions Repository 옵션
- * @returns 필터링된 SerializerOptions
  */
 function filterSerializerOptions(options: any, repositoryOptions: JsonApiRepositoryOptions): any {
-  // 원본 옵션 복사
   const filteredOptions = { ...options };
   
-  // 필터 필드 처리 - 컨트롤러 레벨 필터만 허용하도록 설정
-  // 컨트롤러에서 이미 필터링된 필터를 그대로 사용 (레포지토리 수준의 추가 필터링 없음)
-  // 이렇게 하면 @AllowedFilters 데코레이터로 설정된 필터만 적용됨
-  
-  // 허용된 인클루드가 지정된 경우 (인클루드 필터링은 유지)
+  // 허용된 인클루드 필터링 유지
   if (repositoryOptions.allowedIncludes && filteredOptions.include) {
     const allowedIncludes = repositoryOptions.allowedIncludes;
     const originalIncludes = Array.isArray(filteredOptions.include) 
       ? filteredOptions.include 
       : filteredOptions.include.split(',');
     
-    // 허용된 인클루드 경로만 유지
     const filteredIncludes = originalIncludes.filter(include => {
-      // 중첩 관계(예: 'user.posts')의 경우 기본 관계('user')가 허용 목록에 있는지 확인
       const basePath = include.split('.')[0];
       return allowedIncludes.some(allowed => 
-        allowed === include || // 정확히 일치하거나
-        allowed.startsWith(include + '.') || // 이 include가 허용된 더 깊은 경로의 시작이거나
-        include.startsWith(allowed + '.') || // 허용된 경로가 이 include의 시작이거나
-        allowed === basePath // 기본 경로가 허용되었거나
+        allowed === include || 
+        allowed.startsWith(include + '.') || 
+        include.startsWith(allowed + '.') || 
+        allowed === basePath
       );
     });
     

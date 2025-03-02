@@ -88,7 +88,7 @@ export function buildQueryParams(options: SerializerOptions): {
   // 필터 처리
   if (options.filter && Object.keys(options.filter).length > 0) {
     Object.entries(options.filter).forEach(([field, value]) => {
-      // 단순 값 (filter[name]=value)
+      // 단순 값 필터
       if (typeof value !== 'object') {
         result.filters.push({
           field,
@@ -96,7 +96,7 @@ export function buildQueryParams(options: SerializerOptions): {
           value
         });
       } 
-      // 연산자가 있는 필터 (filter[name][eq]=value)
+      // 연산자가 있는 필터
       else {
         Object.entries(value).forEach(([operator, operand]) => {
           result.filters.push({
