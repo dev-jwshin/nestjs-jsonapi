@@ -16,7 +16,14 @@ export class JSONAPIResponseInterceptor implements NestInterceptor {
 
   intercept(context: ExecutionContext, next: CallHandler): Observable<any> {
     return next.handle().pipe(
-      map(data => this.processResponse(context, data))
+      map(data => {
+        try {
+          return this.processResponse(context, data);
+        } catch (error) {
+          console.error('JSON:API 응답 처리 오류:', error);
+          return data; // 오류 발생 시 원본 데이터 반환
+        }
+      })
     );
   }
 
@@ -29,34 +36,56 @@ export class JSONAPIResponseInterceptor implements NestInterceptor {
       return data;
     }
 
-    // 직렬화 옵션 가져오기
-    const responseOptions = this.getSerializerOptions(context);
+    try {
+      // 직렬화 옵션 가져오기
+      const responseOptions = this.getSerializerOptions(context);
 
-    // 직렬화기가 지정되지 않은 경우 원본 데이터 반환
-    if (!responseOptions || !responseOptions.serializer) {
-      return data;
+      // 직렬화기가 지정되지 않은 경우 원본 데이터 반환
+      if (!responseOptions || !responseOptions.serializer) {
+        return data;
+      }
+
+      // 페이지네이션 옵션 설정
+      const serializerOptions = this.buildSerializerOptions(context, responseOptions);
+
+      // 응답 직렬화
+      return this.serializerService.serialize(
+        responseOptions.serializer,
+        data,
+        serializerOptions
+      );
+    } catch (error) {
+      console.error('JSON:API 응답 처리 중 오류 발생:', error);
+      return data; // 오류 발생 시 원본 데이터 반환
     }
-
-    // 페이지네이션 옵션 설정
-    const serializerOptions = this.buildSerializerOptions(context, responseOptions);
-
-    // 응답 직렬화
-    return this.serializerService.serialize(
-      responseOptions.serializer,
-      data,
-      serializerOptions
-    );
   }
 
   /**
    * 응답 처리를 건너뛰어야 하는지 확인
    */
   private shouldSkipProcessing(context: ExecutionContext, data: any): boolean {
-    return (
-      !data || 
-      data.data !== undefined || 
-      context.switchToHttp().getResponse().statusCode === 204
-    );
+    try {
+      // 응답이 없는 경우 처리 건너뛰기
+      if (!data) return true;
+      
+      // 이미 JSON:API 형식으로 직렬화된 경우 처리 건너뛰기
+      if (data.data !== undefined) return true;
+      
+      // 응답 객체 가져오기 시도
+      try {
+        const response = context.switchToHttp().getResponse();
+        // 응답 객체가 없거나 No Content 상태인 경우 처리 건너뛰기
+        if (!response || response.statusCode === 204) return true;
+      } catch (error) {
+        // 응답 객체를 가져올 수 없으면 안전하게 false 반환 (처리 진행)
+        return false;
+      }
+      
+      return false;
+    } catch (error) {
+      console.warn('JSON:API 처리 건너뛰기 확인 중 오류:', error);
+      return true; // 오류 발생 시 안전하게 처리 건너뛰기
+    }
   }
 
   /**
@@ -98,25 +127,34 @@ export class JSONAPIResponseInterceptor implements NestInterceptor {
     responseOptions: any, 
     serializerOptions: SerializerOptions
   ): void {
-    // 페이지네이션 활성화 여부 확인
-    const paginationEnabled = this.isPaginationEnabled(responseOptions);
-    
-    // 페이지네이션이 비활성화되었으면 아무것도 하지 않음
-    if (!paginationEnabled) {
-      return;
-    }
-    
-    // 현재 요청에 페이지네이션 파라미터가 없는 경우에만 기본 크기 설정
-    const requestHasPagination = this.requestHasPaginationParams(context);
-    
-    if (!requestHasPagination) {
-      const defaultSize = this.getDefaultPageSize(responseOptions);
+    try {
+      // 페이지네이션 활성화 여부 확인
+      const paginationEnabled = this.isPaginationEnabled(responseOptions);
       
-      serializerOptions.pagination = {
-        number: 1,
-        size: defaultSize,
-        count: true
-      };
+      // 페이지네이션이 비활성화되었으면 아무것도 하지 않음
+      if (!paginationEnabled) {
+        return;
+      }
+      
+      // 페이지네이션 파라미터 확인 시 예외 처리 추가
+      let requestHasPagination = false;
+      try {
+        requestHasPagination = this.requestHasPaginationParams(context);
+      } catch (error) {
+        console.warn('JSON:API 페이지네이션 파라미터 확인 실패:', error);
+      }
+      
+      if (!requestHasPagination) {
+        const defaultSize = this.getDefaultPageSize(responseOptions);
+        
+        serializerOptions.pagination = {
+          number: 1,
+          size: defaultSize,
+          count: true
+        };
+      }
+    } catch (error) {
+      console.warn('JSON:API 페이지네이션 옵션 적용 실패:', error);
     }
   }
 
@@ -144,15 +182,33 @@ export class JSONAPIResponseInterceptor implements NestInterceptor {
    * 요청에 페이지네이션 파라미터가 있는지 확인
    */
   private requestHasPaginationParams(context: ExecutionContext): boolean {
-    const request = context.switchToHttp().getRequest();
-    const query = request.query || {};
-    
-    // page[number], page[size], page[after], page[before] 파라미터가 있는지 확인
-    return (
-      query.page?.number !== undefined || 
-      query.page?.size !== undefined ||
-      query.page?.after !== undefined ||
-      query.page?.before !== undefined
-    );
+    try {
+      const request = context.switchToHttp().getRequest();
+      if (!request || !request.query) return false;
+      
+      const query = request.query;
+      
+      // Express에서 query parameter가 page[number]와 같은 형식으로 들어올 경우 처리
+      // 두 가지 가능한 형식 모두 확인: 
+      // 1. query.page?.number (객체 형태)
+      // 2. query['page[number]'] (문자열 키 형태)
+      return (
+        // 객체 형태로 파싱된 경우
+        (query.page && (
+          query.page.number !== undefined || 
+          query.page.size !== undefined ||
+          query.page.after !== undefined ||
+          query.page.before !== undefined
+        )) ||
+        // 문자열 키 형태로 존재하는 경우
+        query['page[number]'] !== undefined ||
+        query['page[size]'] !== undefined ||
+        query['page[after]'] !== undefined ||
+        query['page[before]'] !== undefined
+      );
+    } catch (error) {
+      // 오류 발생 시 false 반환
+      return false;
+    }
   }
 } 
