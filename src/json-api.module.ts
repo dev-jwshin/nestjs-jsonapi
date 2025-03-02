@@ -50,6 +50,9 @@ export interface JsonApiModuleOptions {
 @Global()
 @Module({
   providers: [
+    AttributeProcessor,
+    RelationshipProcessor,
+    IncludeProcessor,
     SerializerRegistry,
     RequestContextService,
     SerializerService,
