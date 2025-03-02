@@ -24,31 +24,49 @@ export class SerializerService {
 
     const options: SerializerOptions = { ...existingOptions };
     
-    // include 파라미터 처리
-    if (req.query.include) {
-      const includeStr = req.query.include as string;
-      let includes = includeStr.split(',').map(i => i.trim());
-      
-      // 허용된 인클루드가 설정되어 있으면 필터링
-      if (req['jsonapiAllowedIncludes']) {
-        const allowedIncludes = req['jsonapiAllowedIncludes'] as string[];
-        includes = includes.filter(include => {
-          // 중첩 관계(예: 'user.posts')의 경우 기본 관계('user')가 허용 목록에 있는지 확인
-          const basePath = include.split('.')[0];
-          return allowedIncludes.some(allowed => 
-            allowed === include || // 정확히 일치하거나
-            allowed.startsWith(include + '.') || // 이 include가 허용된 더 깊은 경로의 시작이거나
-            include.startsWith(allowed + '.') || // 허용된 경로가 이 include의 시작이거나
-            allowed === basePath // 기본 경로가 허용되었거나
-          );
-        });
-      }
-      
-      options.include = includes;
+    this.processIncludeOptions(options, req);
+    this.processFieldOptions(options, req);
+    this.processPaginationOptions(options, req);
+    this.processSortOptions(options, req);
+    this.processFilterOptions(options, req);
+    
+    return options;
+  }
+
+  // include 파라미터 처리
+  private processIncludeOptions(options: SerializerOptions, req: any): void {
+    if (!req.query.include) return;
+    
+    const includeStr = req.query.include as string;
+    let includes = includeStr.split(',').map(i => i.trim());
+    
+    // 허용된 인클루드가 설정되어 있으면 필터링
+    if (req['jsonapiAllowedIncludes']) {
+      const allowedIncludes = req['jsonapiAllowedIncludes'] as string[];
+      includes = this.filterAllowedIncludes(includes, allowedIncludes);
     }
     
-    // fields 파라미터 처리
+    options.include = includes;
+  }
+
+  // 허용된 인클루드 필터링
+  private filterAllowedIncludes(includes: string[], allowedIncludes: string[]): string[] {
+    return includes.filter(include => {
+      // 중첩 관계(예: 'user.posts')의 경우 기본 관계('user')가 허용 목록에 있는지 확인
+      const basePath = include.split('.')[0];
+      return allowedIncludes.some(allowed => 
+        allowed === include || // 정확히 일치하거나
+        allowed.startsWith(include + '.') || // 이 include가 허용된 더 깊은 경로의 시작이거나
+        include.startsWith(allowed + '.') || // 허용된 경로가 이 include의 시작이거나
+        allowed === basePath // 기본 경로가 허용되었거나
+      );
+    });
+  }
+
+  // fields 파라미터 처리
+  private processFieldOptions(options: SerializerOptions, req: any): void {
     options.fields = options.fields || {};
+    
     Object.keys(req.query).forEach(key => {
       if (key.startsWith('fields[') && key.endsWith(']')) {
         const resourceType = key.slice(7, -1);
@@ -56,56 +74,63 @@ export class SerializerService {
         options.fields[resourceType] = fieldsStr.split(',').map(f => f.trim());
       }
     });
-    
-    // 페이지네이션 파라미터 처리
+  }
+
+  // 페이지네이션 파라미터 처리
+  private processPaginationOptions(options: SerializerOptions, req: any): void {
     const pageParams = this.extractObjectParams(req.query, 'page');
-    if (Object.keys(pageParams).length > 0) {
-      options.pagination = {
-        ...options.pagination,
-        number: pageParams.number ? parseInt(pageParams.number as string, 10) : options.pagination?.number,
-        size: pageParams.size ? parseInt(pageParams.size as string, 10) : options.pagination?.size,
-        after: pageParams.after as string || options.pagination?.after,
-        before: pageParams.before as string || options.pagination?.before,
-        count: pageParams.count ? pageParams.count === 'true' : options.pagination?.count ?? true
-      };
-    }
+    if (Object.keys(pageParams).length === 0) return;
     
-    // 정렬 파라미터 처리
-    if (req.query.sort) {
-      const sortStr = req.query.sort as string;
-      options.sort = sortStr.split(',').map(s => {
-        const field = s.trim();
-        if (field.startsWith('-')) {
-          return { field: field.substring(1), direction: 'desc' as const };
-        }
-        return { field, direction: 'asc' as const };
-      });
-    }
+    options.pagination = {
+      ...options.pagination,
+      number: pageParams.number ? parseInt(pageParams.number as string, 10) : options.pagination?.number,
+      size: pageParams.size ? parseInt(pageParams.size as string, 10) : options.pagination?.size,
+      after: pageParams.after as string || options.pagination?.after,
+      before: pageParams.before as string || options.pagination?.before,
+      count: pageParams.count ? pageParams.count === 'true' : options.pagination?.count ?? true
+    };
+  }
+
+  // 정렬 파라미터 처리
+  private processSortOptions(options: SerializerOptions, req: any): void {
+    if (!req.query.sort) return;
     
-    // 필터 파라미터 처리
-    const filterParams = this.extractObjectParams(req.query, 'filter');
-    if (Object.keys(filterParams).length > 0) {
-      let filters = filterParams;
-      
-      // 허용된 필터가 설정되어 있으면 필터링
-      if (req['jsonapiAllowedFilters']) {
-        const allowedFilters = req['jsonapiAllowedFilters'] as string[];
-        const filteredFilters = {};
-        
-        // 허용된 필터 필드만 유지
-        Object.keys(filters).forEach(key => {
-          if (allowedFilters.includes(key)) {
-            filteredFilters[key] = filters[key];
-          }
-        });
-        
-        filters = filteredFilters;
+    const sortStr = req.query.sort as string;
+    options.sort = sortStr.split(',').map(s => {
+      const field = s.trim();
+      if (field.startsWith('-')) {
+        return { field: field.substring(1), direction: 'desc' as const };
       }
-      
-      options.filter = filters;
+      return { field, direction: 'asc' as const };
+    });
+  }
+
+  // 필터 파라미터 처리
+  private processFilterOptions(options: SerializerOptions, req: any): void {
+    const filterParams = this.extractObjectParams(req.query, 'filter');
+    if (Object.keys(filterParams).length === 0) return;
+    
+    let filters = filterParams;
+    
+    // 허용된 필터가 설정되어 있으면 필터링
+    if (req['jsonapiAllowedFilters']) {
+      filters = this.filterAllowedFilters(filters, req['jsonapiAllowedFilters'] as string[]);
     }
     
-    return options;
+    options.filter = filters;
+  }
+
+  // 허용된 필터 필드만 유지
+  private filterAllowedFilters(filters: Record<string, any>, allowedFilters: string[]): Record<string, any> {
+    const filteredFilters = {};
+    
+    Object.keys(filters).forEach(key => {
+      if (allowedFilters.includes(key)) {
+        filteredFilters[key] = filters[key];
+      }
+    });
+    
+    return filteredFilters;
   }
   
   // 중첩된 쿼리 파라미터 추출 헬퍼 메서드 (filter[name]=value, filter[date][gte]=value 등)

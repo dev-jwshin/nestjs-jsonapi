@@ -82,15 +82,22 @@ export class JsonApiModule {
       providers: [
         {
           provide: 'JSONAPI_MODULE_OPTIONS',
-          useValue: {
-            pagination: {
-              enabled: options.pagination?.enabled !== undefined ? options.pagination.enabled : true,
-              size: options.pagination?.size || 10
-            }
-          }
+          useValue: this.getDefaultModuleOptions(options)
         }
       ],
       exports: ['JSONAPI_MODULE_OPTIONS']
+    };
+  }
+
+  /**
+   * 기본 모듈 옵션 생성
+   */
+  private static getDefaultModuleOptions(options: JsonApiModuleOptions): Record<string, any> {
+    return {
+      pagination: {
+        enabled: options.pagination?.enabled !== undefined ? options.pagination.enabled : true,
+        size: options.pagination?.size || 10
+      }
     };
   }
 
@@ -124,23 +131,32 @@ export class JsonApiModule {
   static forFeature(
     entities: (EntityClassOrSchema | EntityOptions)[]
   ): DynamicModule {
-    const providers: Provider[] = entities.map(entityOption => {
-      // entityOption이 EntityOptions 타입인지 확인
-      if (typeof entityOption === 'object' && 'entity' in entityOption) {
-        return createJsonApiRepositoryProvider(
-          entityOption.entity, 
-          entityOption.options || {}
-        );
-      }
-      
-      // 단순 엔티티 클래스인 경우 (기본 옵션 사용)
-      return createJsonApiRepositoryProvider(entityOption);
-    });
+    const providers: Provider[] = entities.map(entityOption => 
+      this.createRepositoryProvider(entityOption)
+    );
 
     return {
       module: JsonApiModule,
       providers: providers,
       exports: providers,
     };
+  }
+
+  /**
+   * 저장소 프로바이더 생성
+   */
+  private static createRepositoryProvider(
+    entityOption: EntityClassOrSchema | EntityOptions
+  ): Provider {
+    // entityOption이 EntityOptions 타입인지 확인
+    if (typeof entityOption === 'object' && 'entity' in entityOption) {
+      return createJsonApiRepositoryProvider(
+        entityOption.entity, 
+        entityOption.options || {}
+      );
+    }
+    
+    // 단순 엔티티 클래스인 경우 (기본 옵션 사용)
+    return createJsonApiRepositoryProvider(entityOption);
   }
 } 

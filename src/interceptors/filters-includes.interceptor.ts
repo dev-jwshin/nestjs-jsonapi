@@ -22,6 +22,17 @@ export class FiltersIncludesInterceptor implements NestInterceptor {
       return next.handle();
     }
 
+    // 허용된 필터와 인클루드 설정을 요청 객체에 저장
+    this.setAllowedFilters(context, request);
+    this.setAllowedIncludes(context, request);
+
+    return next.handle();
+  }
+
+  /**
+   * 허용된 필터 설정
+   */
+  private setAllowedFilters(context: ExecutionContext, request: any): void {
     // 메서드 레벨 설정을 먼저 확인
     const methodFilters = this.reflector.get<string[]>(
       JSONAPI_ALLOWED_FILTERS,
@@ -34,6 +45,17 @@ export class FiltersIncludesInterceptor implements NestInterceptor {
       context.getClass(),
     );
 
+    // 메서드 레벨 설정이 있으면 우선 사용, 없으면 클래스 레벨 설정 사용
+    const allowedFilters = methodFilters || classFilters;
+    
+    // request 객체에 설정 저장 (추후 서비스에서 사용)
+    request['jsonapiAllowedFilters'] = allowedFilters;
+  }
+
+  /**
+   * 허용된 인클루드 설정
+   */
+  private setAllowedIncludes(context: ExecutionContext, request: any): void {
     // 메서드 레벨 인클루드 설정 확인
     const methodIncludes = this.reflector.get<string[]>(
       JSONAPI_ALLOWED_INCLUDES,
@@ -47,13 +69,9 @@ export class FiltersIncludesInterceptor implements NestInterceptor {
     );
 
     // 메서드 레벨 설정이 있으면 우선 사용, 없으면 클래스 레벨 설정 사용
-    const allowedFilters = methodFilters || classFilters;
     const allowedIncludes = methodIncludes || classIncludes;
-
+    
     // request 객체에 설정 저장 (추후 서비스에서 사용)
-    request['jsonapiAllowedFilters'] = allowedFilters;
     request['jsonapiAllowedIncludes'] = allowedIncludes;
-
-    return next.handle();
   }
 } 

@@ -50,101 +50,123 @@ export function createJsonApiRepositoryProvider<T extends ObjectLiteral>(
           if (prop === 'find' && typeof originalValue === 'function') {
             // find 메서드 래핑
             return async function(...args: any[]) {
-              // JSON:API 쿼리 파라미터 가져오기
-              const serializerOptions = serializerService.getAutoOptions();
-              
-              // 허용된 필터와 인클루드로 옵션 필터링
-              const filteredOptions = filterSerializerOptions(serializerOptions, options);
-              
-              const { filters, sorts, pagination } = buildQueryParams(filteredOptions);
-              
-              // 기본 옵션 (인자가 있으면 첫 번째 인자 사용)
-              const queryOptions = args.length > 0 ? { ...args[0] } : {};
-              
-              // 필터 적용
-              if (filters.length > 0) {
-                queryOptions.where = queryOptions.where || {};
-                
-                // 단순 필터만 지원 (eq 연산자)
-                filters.forEach(filter => {
-                  if (filter.operator === 'eq') {
-                    if (typeof queryOptions.where === 'object' && !Array.isArray(queryOptions.where)) {
-                      queryOptions.where[filter.field] = filter.value;
-                    }
-                  }
-                });
-              }
-              
-              // 정렬 적용
-              if (sorts.length > 0) {
-                queryOptions.order = queryOptions.order || {};
-                
-                sorts.forEach(sort => {
-                  queryOptions.order[sort.field] = sort.direction.toUpperCase();
-                });
-              }
-              
-              // 페이지네이션 적용 (오프셋 기반)
-              if (pagination.page !== undefined && pagination.perPage !== undefined) {
-                queryOptions.skip = (pagination.page - 1) * pagination.perPage;
-                queryOptions.take = pagination.perPage;
-              }
-              
-              // 원래 메서드 호출 (수정된 옵션으로)
-              return originalValue.apply(target, queryOptions ? [queryOptions] : args);
+              return wrapRepositoryMethod(originalValue, target, args, serializerService, options);
             };
           } 
           // findAndCount 메서드도 동일하게 처리
           else if (prop === 'findAndCount' && typeof originalValue === 'function') {
             return async function(...args: any[]) {
-              // JSON:API 쿼리 파라미터 가져오기
-              const serializerOptions = serializerService.getAutoOptions();
-              
-              // 허용된 필터와 인클루드로 옵션 필터링
-              const filteredOptions = filterSerializerOptions(serializerOptions, options);
-              
-              const { filters, sorts, pagination } = buildQueryParams(filteredOptions);
-              
-              const queryOptions = args.length > 0 ? { ...args[0] } : {};
-              
-              // 필터 적용
-              if (filters.length > 0) {
-                queryOptions.where = queryOptions.where || {};
-                
-                filters.forEach(filter => {
-                  if (filter.operator === 'eq') {
-                    if (typeof queryOptions.where === 'object' && !Array.isArray(queryOptions.where)) {
-                      queryOptions.where[filter.field] = filter.value;
-                    }
-                  }
-                });
-              }
-              
-              // 정렬 적용
-              if (sorts.length > 0) {
-                queryOptions.order = queryOptions.order || {};
-                
-                sorts.forEach(sort => {
-                  queryOptions.order[sort.field] = sort.direction.toUpperCase();
-                });
-              }
-              
-              // 페이지네이션 적용 (오프셋 기반)
-              if (pagination.page !== undefined && pagination.perPage !== undefined) {
-                queryOptions.skip = (pagination.page - 1) * pagination.perPage;
-                queryOptions.take = pagination.perPage;
-              }
-              
-              return originalValue.apply(target, queryOptions ? [queryOptions] : args);
+              return wrapRepositoryMethod(originalValue, target, args, serializerService, options);
+            };
+          }
+          else if (prop === 'findOne' && typeof originalValue === 'function') {
+            return async function(...args: any[]) {
+              return wrapRepositoryMethod(originalValue, target, args, serializerService, options);
+            };
+          }
+          else if (prop === 'count' && typeof originalValue === 'function') {
+            return async function(...args: any[]) {
+              return wrapRepositoryMethod(originalValue, target, args, serializerService, options);
             };
           }
           
-          // 나머지 메서드는 그대로 사용
+          // 다른 메서드/속성은 원래대로 반환
           return originalValue;
         }
       });
     }
   };
+}
+
+/**
+ * Repository 메서드를 JSON:API 쿼리 파라미터와 함께 실행
+ */
+async function wrapRepositoryMethod<T>(
+  originalMethod: Function, 
+  target: Repository<T>, 
+  args: any[],
+  serializerService: SerializerService,
+  options: JsonApiRepositoryOptions
+) {
+  // JSON:API 쿼리 파라미터 가져오기
+  const serializerOptions = serializerService.getAutoOptions();
+  
+  // 허용된 필터와 인클루드로 옵션 필터링
+  const filteredOptions = filterSerializerOptions(serializerOptions, options);
+  
+  // 쿼리 파라미터 빌드
+  const { filters, sorts, pagination } = buildQueryParams(filteredOptions);
+  
+  // 쿼리 옵션 생성 및 적용
+  const queryOptions = createQueryOptions(args, filters, sorts, pagination);
+  
+  // 원래 메서드 호출 (수정된 옵션으로)
+  return originalMethod.apply(target, queryOptions ? [queryOptions] : args);
+}
+
+/**
+ * 쿼리 옵션 생성
+ */
+function createQueryOptions(
+  args: any[], 
+  filters: any[], 
+  sorts: any[], 
+  pagination: any
+): any {
+  // 기본 옵션 (인자가 있으면 첫 번째 인자 사용)
+  const queryOptions = args.length > 0 ? { ...args[0] } : {};
+  
+  // 필터 적용
+  applyFilters(queryOptions, filters);
+  
+  // 정렬 적용
+  applySorting(queryOptions, sorts);
+  
+  // 페이지네이션 적용
+  applyPagination(queryOptions, pagination);
+  
+  return queryOptions;
+}
+
+/**
+ * 필터 적용
+ */
+function applyFilters(queryOptions: any, filters: any[]): void {
+  if (filters.length === 0) return;
+  
+  queryOptions.where = queryOptions.where || {};
+  
+  // 단순 필터만 지원 (eq 연산자)
+  filters.forEach(filter => {
+    if (filter.operator === 'eq') {
+      if (typeof queryOptions.where === 'object' && !Array.isArray(queryOptions.where)) {
+        queryOptions.where[filter.field] = filter.value;
+      }
+    }
+  });
+}
+
+/**
+ * 정렬 적용
+ */
+function applySorting(queryOptions: any, sorts: any[]): void {
+  if (sorts.length === 0) return;
+  
+  queryOptions.order = queryOptions.order || {};
+  
+  sorts.forEach(sort => {
+    queryOptions.order[sort.field] = sort.direction.toUpperCase();
+  });
+}
+
+/**
+ * 페이지네이션 적용
+ */
+function applyPagination(queryOptions: any, pagination: any): void {
+  if (pagination.page === undefined || pagination.perPage === undefined) return;
+  
+  queryOptions.skip = (pagination.page - 1) * pagination.perPage;
+  queryOptions.take = pagination.perPage;
 }
 
 /**
