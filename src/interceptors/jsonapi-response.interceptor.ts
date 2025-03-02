@@ -6,11 +6,13 @@ import { SerializerService } from '../services/serializer.service';
 import { JSONAPI_RESPONSE_SERIALIZER } from '../decorators/response.decorator';
 import { SerializerOptions } from '../interfaces/serializer.interface';
 import { ModuleRef } from '@nestjs/core';
+import { SerializerRegistry } from '../services/serializer-registry.service';
 
 @Injectable()
 export class JSONAPIResponseInterceptor implements NestInterceptor {
   private reflector: Reflector;
   private serializerService: SerializerService;
+  private serializerRegistry: SerializerRegistry;
   private moduleOptions: any;
   private _hasAttemptedLoading: boolean = false;
 
@@ -26,6 +28,7 @@ export class JSONAPIResponseInterceptor implements NestInterceptor {
         try {
           this.reflector = this.moduleRef.get(Reflector, { strict: false });
           this.serializerService = this.moduleRef.get(SerializerService, { strict: false });
+          this.serializerRegistry = this.moduleRef.get(SerializerRegistry, { strict: false });
           
           if (!this.reflector) {
             console.error('Reflector를 ModuleRef에서 찾을 수 없습니다.');
@@ -34,6 +37,11 @@ export class JSONAPIResponseInterceptor implements NestInterceptor {
           
           if (!this.serializerService) {
             console.error('SerializerService를 ModuleRef에서 찾을 수 없습니다.');
+            this.logModuleSetupInstructions();
+          }
+          
+          if (!this.serializerRegistry) {
+            console.error('SerializerRegistry를 ModuleRef에서 찾을 수 없습니다.');
             this.logModuleSetupInstructions();
           }
         } catch (error) {
@@ -91,6 +99,16 @@ export class JSONAPIResponseInterceptor implements NestInterceptor {
           if (shouldLog) console.error('SerializerService 로드 실패:', error);
         }
       }
+      
+      if (!this.serializerRegistry && this.moduleRef) {
+        try {
+          if (shouldLog) console.log('SerializerRegistry 가져오기 시도 중...');
+          this.serializerRegistry = this.moduleRef.get(SerializerRegistry, { strict: false });
+          if (this.serializerRegistry && shouldLog) console.log('SerializerRegistry 로드 성공!');
+        } catch (error) {
+          if (shouldLog) console.error('SerializerRegistry 로드 실패:', error);
+        }
+      }
     } catch (error) {
       console.error('의존성 확인 중 예상치 못한 오류 발생:', error);
     }
@@ -146,11 +164,29 @@ export class JSONAPIResponseInterceptor implements NestInterceptor {
         }
       }
       
+      // serializerRegistry가 없으면 가져오기 시도
+      if (!this.serializerRegistry && this.moduleRef) {
+        try {
+          console.log('SerializerRegistry를 동적으로 가져오는 중...');
+          this.serializerRegistry = this.moduleRef.get(SerializerRegistry, { strict: false });
+        } catch (error) {
+          console.error('SerializerRegistry 동적 로드 실패:', error);
+        }
+      }
+      
       // 여전히 serializerService가 정의되어 있지 않으면 원본 데이터 반환
       if (!this.serializerService) {
         console.error('serializerService가 정의되지 않았습니다. 직렬화를 적용할 수 없습니다.');
         return data;
       }
+      
+      if (!this.serializerRegistry) {
+        console.error('serializerRegistry가 정의되지 않았습니다. 직렬화기를 등록할 수 없습니다.');
+        return data;
+      }
+
+      // 직렬화기 등록
+      this.serializerRegistry.registerByClassName(responseOptions.serializer);
 
       // 응답 직렬화
       try {
