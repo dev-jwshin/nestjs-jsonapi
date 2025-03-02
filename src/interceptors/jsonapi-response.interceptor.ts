@@ -92,19 +92,35 @@ export class JSONAPIResponseInterceptor implements NestInterceptor {
    * 컨트롤러 메서드/클래스에서 직렬화 옵션 가져오기
    */
   private getSerializerOptions(context: ExecutionContext): any {
-    // 컨트롤러 메서드에서 메타데이터 가져오기
-    const methodOptions = this.reflector.get(
-      JSONAPI_RESPONSE_SERIALIZER,
-      context.getHandler(),
-    );
+    try {
+      // reflector가 없으면 null 반환
+      if (!this.reflector) {
+        console.warn('JSON:API reflector가 정의되지 않았습니다.');
+        return null;
+      }
 
-    // 컨트롤러 클래스에서 메타데이터 가져오기 (메서드에 없는 경우)
-    const classOptions = this.reflector.get(
-      JSONAPI_RESPONSE_SERIALIZER,
-      context.getClass(),
-    );
+      try {
+        // 컨트롤러 메서드에서 메타데이터 가져오기
+        const methodOptions = this.reflector.get(
+          JSONAPI_RESPONSE_SERIALIZER,
+          context.getHandler(),
+        );
 
-    return methodOptions || classOptions;
+        // 컨트롤러 클래스에서 메타데이터 가져오기 (메서드에 없는 경우)
+        const classOptions = this.reflector.get(
+          JSONAPI_RESPONSE_SERIALIZER,
+          context.getClass(),
+        );
+
+        return methodOptions || classOptions;
+      } catch (error) {
+        console.warn('JSON:API 메타데이터 가져오기 실패:', error);
+        return null;
+      }
+    } catch (error) {
+      console.error('JSON:API 직렬화 옵션 가져오기 실패:', error);
+      return null;
+    }
   }
 
   /**
