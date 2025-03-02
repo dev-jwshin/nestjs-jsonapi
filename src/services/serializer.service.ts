@@ -27,7 +27,24 @@ export class SerializerService {
     // include 파라미터 처리
     if (req.query.include) {
       const includeStr = req.query.include as string;
-      options.include = includeStr.split(',').map(i => i.trim());
+      let includes = includeStr.split(',').map(i => i.trim());
+      
+      // 허용된 인클루드가 설정되어 있으면 필터링
+      if (req['jsonapiAllowedIncludes']) {
+        const allowedIncludes = req['jsonapiAllowedIncludes'] as string[];
+        includes = includes.filter(include => {
+          // 중첩 관계(예: 'user.posts')의 경우 기본 관계('user')가 허용 목록에 있는지 확인
+          const basePath = include.split('.')[0];
+          return allowedIncludes.some(allowed => 
+            allowed === include || // 정확히 일치하거나
+            allowed.startsWith(include + '.') || // 이 include가 허용된 더 깊은 경로의 시작이거나
+            include.startsWith(allowed + '.') || // 허용된 경로가 이 include의 시작이거나
+            allowed === basePath // 기본 경로가 허용되었거나
+          );
+        });
+      }
+      
+      options.include = includes;
     }
     
     // fields 파라미터 처리
@@ -67,7 +84,24 @@ export class SerializerService {
     // 필터 파라미터 처리
     const filterParams = this.extractObjectParams(req.query, 'filter');
     if (Object.keys(filterParams).length > 0) {
-      options.filter = filterParams;
+      let filters = filterParams;
+      
+      // 허용된 필터가 설정되어 있으면 필터링
+      if (req['jsonapiAllowedFilters']) {
+        const allowedFilters = req['jsonapiAllowedFilters'] as string[];
+        const filteredFilters = {};
+        
+        // 허용된 필터 필드만 유지
+        Object.keys(filters).forEach(key => {
+          if (allowedFilters.includes(key)) {
+            filteredFilters[key] = filters[key];
+          }
+        });
+        
+        filters = filteredFilters;
+      }
+      
+      options.filter = filters;
     }
     
     return options;

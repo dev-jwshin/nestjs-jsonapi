@@ -24,7 +24,7 @@ JSON:API serialization package for NestJS
 ## 설치
 
 ```bash
-npm install @foryourdev/nestjs-jsonapi
+npm install @foryourdev/nestjs-jsonapi@latest
 ```
 
 ## 기본 설정
@@ -736,6 +736,8 @@ GET /posts?filter[title]=테스트&include=author,comments
 - `@HasOne(options)` - 일대일 관계 정의
 - `@BelongsTo(options)` - 종속 관계 정의
 - `@JSONAPIResponse(options)` - 컨트롤러/메서드에 자동 직렬화 적용
+- `@AllowedFilters(filters)` - 컨트롤러 또는 메서드에 허용된 필터 필드 정의
+- `@AllowedIncludes(includes)` - 컨트롤러 또는 메서드에 허용된 인클루드 경로 정의
 
 ### 서비스
 
@@ -752,4 +754,46 @@ MIT
 
 더 자세한 정보와 API 문서는 [GitHub 저장소](https://github.com/dev-jwshin/nestjs-jsonapi)를 참조하세요.
 
-이슈 및 풀 리퀘스트는 언제나 환영합니다! 
+이슈 및 풀 리퀘스트는 언제나 환영합니다!
+
+### 3. 컨트롤러 및 메서드 레벨의 필터 및 인클루드 제어
+
+모듈 레벨 설정 외에도 컨트롤러 및 메서드 레벨에서 데코레이터를 사용하여 허용된 필터와 인클루드를 제어할 수 있습니다:
+
+```typescript
+import { Controller, Get, Param } from '@nestjs/common';
+import { InjectRepository } from '@nestjs/typeorm';
+import { Repository } from 'typeorm';
+import { Post } from '../entities/post.entity';
+import { JSONAPIResponse, AllowedFilters, AllowedIncludes } from '@foryourdev/nestjs-jsonapi';
+import { PostSerializer } from '../serializers/post.serializer';
+
+@Controller('posts')
+@JSONAPIResponse({ serializer: PostSerializer })
+@AllowedFilters(['title', 'status', 'createdAt']) // 컨트롤러의 모든 메서드에 적용
+@AllowedIncludes(['author', 'comments']) // 컨트롤러의 모든 메서드에 적용
+export class PostController {
+  constructor(
+    @InjectRepository(Post)
+    private readonly postRepository: Repository<Post>,
+  ) {}
+  
+  @Get()
+  async findAll() {
+    return await this.postRepository.find();
+  }
+  
+  @Get('featured')
+  @AllowedFilters(['title', 'viewCount']) // 컨트롤러 레벨 설정을 재정의
+  @AllowedIncludes(['author']) // 컨트롤러 레벨 설정을 재정의
+  async findFeatured() {
+    return await this.postRepository.find({ where: { featured: true } });
+  }
+}
+```
+
+#### 데코레이터 우선순위
+
+- 메서드 레벨 데코레이터가 컨트롤러 레벨 데코레이터보다 우선합니다
+- 메서드에 `@AllowedFilters` 또는 `@AllowedIncludes` 데코레이터가 있으면 컨트롤러 레벨 설정을 완전히 재정의합니다
+- 메서드에 이러한 데코레이터가 없으면 컨트롤러 레벨 설정을 상속받습니다

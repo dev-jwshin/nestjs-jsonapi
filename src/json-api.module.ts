@@ -7,6 +7,7 @@ import { SerializerRegistry } from './services/serializer-registry.service';
 import { RequestContextService } from './services/request-context.service';
 import { APP_INTERCEPTOR } from '@nestjs/core';
 import { JSONAPIResponseInterceptor } from './interceptors/jsonapi-response.interceptor';
+import { FiltersIncludesInterceptor } from './interceptors/filters-includes.interceptor';
 import { TypeOrmQueryBuilderService } from './services/typeorm-query-builder.service';
 import { createJsonApiRepositoryProvider, JsonApiRepositoryOptions } from './providers/repository.factory';
 import { EntityClassOrSchema } from '@nestjs/typeorm/dist/interfaces/entity-class-or-schema.type';
@@ -39,6 +40,10 @@ export interface EntityOptions {
     {
       provide: APP_INTERCEPTOR,
       useClass: JSONAPIResponseInterceptor,
+    },
+    {
+      provide: APP_INTERCEPTOR,
+      useClass: FiltersIncludesInterceptor,
     },
   ],
   exports: [

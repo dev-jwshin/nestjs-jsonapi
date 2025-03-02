@@ -24,7 +24,7 @@ This package helps you easily generate responses compliant with the [JSON:API sp
 ## Installation
 
 ```bash
-npm install @foryourdev/nestjs-jsonapi
+npm install @foryourdev/nestjs-jsonapi@latest
 ```
 
 ## Basic Setup
@@ -725,6 +725,48 @@ Using this approach:
 3. You can maintain the original TypeORM usage pattern without additional wrappers.
 4. You can finely control allowed filters and includes per entity.
 
+### 3. Controller-Level and Method-Level Control of Filters and Includes
+
+In addition to module-level configuration, you can use decorators to control allowed filters and includes at the controller and method levels:
+
+```typescript
+import { Controller, Get, Param } from '@nestjs/common';
+import { InjectRepository } from '@nestjs/typeorm';
+import { Repository } from 'typeorm';
+import { Post } from '../entities/post.entity';
+import { JSONAPIResponse, AllowedFilters, AllowedIncludes } from '@foryourdev/nestjs-jsonapi';
+import { PostSerializer } from '../serializers/post.serializer';
+
+@Controller('posts')
+@JSONAPIResponse({ serializer: PostSerializer })
+@AllowedFilters(['title', 'status', 'createdAt']) // Applied to all methods in controller
+@AllowedIncludes(['author', 'comments']) // Applied to all methods in controller
+export class PostController {
+  constructor(
+    @InjectRepository(Post)
+    private readonly postRepository: Repository<Post>,
+  ) {}
+  
+  @Get()
+  async findAll() {
+    return await this.postRepository.find();
+  }
+  
+  @Get('featured')
+  @AllowedFilters(['title', 'viewCount']) // Overrides controller-level settings
+  @AllowedIncludes(['author']) // Overrides controller-level settings
+  async findFeatured() {
+    return await this.postRepository.find({ where: { featured: true } });
+  }
+}
+```
+
+#### Decorator Priority
+
+- Method-level decorators take precedence over controller-level decorators
+- If a method has its own `@AllowedFilters` or `@AllowedIncludes` decorators, they completely override the controller-level settings
+- If a method doesn't have these decorators, it inherits the controller-level settings
+
 ## API Reference
 
 ### Decorators
@@ -735,6 +777,8 @@ Using this approach:
 - `@HasOne(options)` - Define a one-to-one relationship
 - `@BelongsTo(options)` - Define a belongs-to relationship
 - `@JSONAPIResponse(options)` - Apply automatic serialization to controllers/methods
+- `@AllowedFilters(filters)` - Define allowed filter fields for a controller or method
+- `@AllowedIncludes(includes)` - Define allowed include paths for a controller or method
 
 ### Services
 
