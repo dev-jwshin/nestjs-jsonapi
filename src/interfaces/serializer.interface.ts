@@ -8,7 +8,7 @@ export interface SerializerOptions {
     size?: number;
     after?: string;
     before?: string;
-    // 총 개수를 응답에 포함할지 여부
+    // 총 개수를 응답에 포함할지 여부 (기본값: true)
     count?: boolean;
   };
   // 정렬

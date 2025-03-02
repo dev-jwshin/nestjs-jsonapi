@@ -344,7 +344,7 @@ export class SerializerService {
       
       result.data = data.slice(startIndex, endIndex);
       
-      if (pagination.count) {
+      if (pagination.count !== false) {
         result.meta = {
           current_page: page,
           from: startIndex + 1,
@@ -396,7 +396,7 @@ export class SerializerService {
       
       result.data = data.slice(startIndex, startIndex + size);
       
-      if (pagination.count) {
+      if (pagination.count !== false) {
         result.meta = {
           per_page: size,
           count: result.data.length,

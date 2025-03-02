@@ -65,7 +65,8 @@ export class JSONAPIResponseInterceptor implements NestInterceptor {
             
             serializerOptions.pagination = {
               number: 1,
-              size: defaultSize
+              size: defaultSize,
+              count: true
             };
           }
         }
