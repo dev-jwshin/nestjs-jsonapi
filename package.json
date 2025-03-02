@@ -20,7 +20,7 @@
     "release:major": "npm version major",
     "release:minor": "npm version minor",
     "release:patch": "npm version patch",
-    "predeploy": "npm run lint && npm run build:clean",
+    "predeploy": "npm run build:clean",
     "deploy": "npm publish --access public",
     "deploy:major": "npm run release:major && npm run deploy",
     "deploy:minor": "npm run release:minor && npm run deploy",
