@@ -21,11 +21,8 @@ export class SerializerService {
   getAutoOptions(existingOptions?: SerializerOptions): SerializerOptions {
     const req = this.requestContextService.get();
     if (!req) {
-      console.log('No request context found in getAutoOptions');
       return existingOptions || {};
     }
-
-    console.log('Request query in getAutoOptions:', JSON.stringify(req.query));
     
     const options: SerializerOptions = { ...existingOptions };
     
@@ -35,7 +32,6 @@ export class SerializerService {
     this.processSortOptions(options, req);
     this.processFilterOptions(options, req);
     
-    console.log('Final options in getAutoOptions:', JSON.stringify(options));
     return options;
   }
 
@@ -113,12 +109,9 @@ export class SerializerService {
 
   // 필터 파라미터 처리
   private processFilterOptions(options: SerializerOptions, req: any): void {
-    console.log('Processing filter options');
     const filterParams = this.extractObjectParams(req.query, 'filter');
-    console.log('Extracted filter params:', JSON.stringify(filterParams));
     
     if (Object.keys(filterParams).length === 0) {
-      console.log('No filter parameters found');
       return;
     }
     
@@ -126,13 +119,9 @@ export class SerializerService {
     
     // 허용된 필터가 설정되어 있으면 필터링
     if (req['jsonapiAllowedFilters']) {
-      console.log('Allowed filters found:', JSON.stringify(req['jsonapiAllowedFilters']));
       filters = this.filterAllowedFilters(filters, req['jsonapiAllowedFilters'] as string[]);
-    } else {
-      console.log('No allowed filters defined');
     }
     
-    console.log('Final filters:', JSON.stringify(filters));
     options.filter = filters;
   }
 
@@ -151,7 +140,6 @@ export class SerializerService {
   
   // 중첩된 쿼리 파라미터 추출 헬퍼 메서드 (filter[name]=value, filter[date][gte]=value 등)
   private extractObjectParams(query: Record<string, any>, prefix: string): Record<string, any> {
-    console.log(`Extracting ${prefix} parameters from query:`, JSON.stringify(query));
     const result: Record<string, any> = {};
     
     Object.keys(query).forEach(key => {
@@ -159,7 +147,6 @@ export class SerializerService {
       if (key.startsWith(`${prefix}[`) && key.endsWith(']')) {
         const paramName = key.slice(prefix.length + 1, -1);
         result[paramName] = query[key];
-        console.log(`Found simple param: ${key} -> ${paramName}=${query[key]}`);
       }
       
       // 중첩 파라미터 (filter[date][gte]=value)
@@ -170,11 +157,9 @@ export class SerializerService {
           result[paramName] = {};
         }
         result[paramName][nestedKey] = query[key];
-        console.log(`Found nested param: ${key} -> ${paramName}.${nestedKey}=${query[key]}`);
       }
     });
     
-    console.log(`Extracted ${Object.keys(result).length} ${prefix} parameters:`, JSON.stringify(result));
     return result;
   }
 
@@ -316,11 +301,6 @@ export class SerializerService {
   
   // 필터링 적용
   private applyFiltering(data: any[], filters: Record<string, any>): any[] {
-    console.log('Filtering data:', { 
-      dataLength: data.length, 
-      filters: JSON.stringify(filters)
-    });
-    
     const filtered = data.filter(item => {
       // 모든 필터 조건을 검사
       return Object.entries(filters).every(([key, value]) => {
@@ -334,7 +314,6 @@ export class SerializerService {
           // 문자열 값은 대소문자 구분 없이 부분 일치 검색
           if (typeof item[key] === 'string' && typeof value === 'string') {
             const result = item[key].toLowerCase().includes(value.toLowerCase());
-            console.log(`  Comparing string: item[${key}]=${item[key]} with ${value}, result=${result}`);
             return result;
           }
           return item[key] === value;
@@ -366,7 +345,6 @@ export class SerializerService {
       });
     });
     
-    console.log('Filtered data length:', filtered.length);
     return filtered;
   }
   
