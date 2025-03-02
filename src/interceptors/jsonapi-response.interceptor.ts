@@ -12,7 +12,16 @@ export class JSONAPIResponseInterceptor implements NestInterceptor {
     private readonly reflector: Reflector,
     private readonly serializerService: SerializerService,
     @Optional() @Inject('JSONAPI_MODULE_OPTIONS') private readonly moduleOptions?: any,
-  ) {}
+  ) {
+    // reflector와 serializerService가 주입되었는지 확인
+    if (!this.reflector) {
+      console.error('Reflector가 주입되지 않았습니다. JSON:API 인터셉터가 제대로 작동하지 않을 수 있습니다.');
+    }
+    
+    if (!this.serializerService) {
+      console.error('SerializerService가 주입되지 않았습니다. JSON:API 인터셉터가 제대로 작동하지 않을 수 있습니다.');
+    }
+  }
 
   intercept(context: ExecutionContext, next: CallHandler): Observable<any> {
     return next.handle().pipe(
@@ -67,12 +76,40 @@ export class JSONAPIResponseInterceptor implements NestInterceptor {
         serializerOptions.request = request;
       }
 
+      // serializerService가 정의되어 있는지 확인
+      if (!this.serializerService) {
+        console.error('serializerService가 정의되지 않았습니다.');
+        return data;
+      }
+
       // 응답 직렬화
-      return this.serializerService.serialize(
-        responseOptions.serializer,
-        data,
-        serializerOptions
-      );
+      try {
+        return this.serializerService.serialize(
+          responseOptions.serializer,
+          data,
+          serializerOptions
+        );
+      } catch (error) {
+        console.error('JSON:API 직렬화 중 오류 발생:', error);
+        console.log('직렬화에 실패하여 원본 데이터를 반환합니다. JsonApiModule이 제대로 설정되었는지 확인하세요:');
+        console.log('app.module.ts에 다음과 같이 등록하세요:');
+        console.log(`
+          import { Module } from '@nestjs/common';
+          import { JsonApiModule } from '@foryourdev/nestjs-jsonapi';
+          
+          @Module({
+            imports: [
+              JsonApiModule.forRoot({
+                pagination: { enabled: true, size: 10 }
+              }),
+              // 다른 모듈...
+            ],
+          })
+          export class AppModule {}
+        `);
+        
+        return data;
+      }
     } catch (error) {
       console.error('JSON:API 응답 처리 중 오류 발생:', error);
       // 오류 발생 시에도 기본 JSON:API 형식으로 응답 시도
@@ -130,15 +167,23 @@ export class JSONAPIResponseInterceptor implements NestInterceptor {
 
       try {
         // 컨트롤러 메서드에서 메타데이터 가져오기
+        const handler = context.getHandler();
+        const cls = context.getClass();
+        
+        if (!handler || !cls) {
+          console.warn('컨트롤러 핸들러 또는 클래스를 가져올 수 없습니다.');
+          return null;
+        }
+        
         const methodOptions = this.reflector.get(
           JSONAPI_RESPONSE_SERIALIZER,
-          context.getHandler(),
+          handler,
         );
 
         // 컨트롤러 클래스에서 메타데이터 가져오기 (메서드에 없는 경우)
         const classOptions = this.reflector.get(
           JSONAPI_RESPONSE_SERIALIZER,
-          context.getClass(),
+          cls,
         );
 
         return methodOptions || classOptions;
