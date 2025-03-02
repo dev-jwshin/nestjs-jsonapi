@@ -50,12 +50,9 @@ export interface JsonApiModuleOptions {
 @Global()
 @Module({
   providers: [
-    SerializerService,
-    AttributeProcessor,
-    RelationshipProcessor,
-    IncludeProcessor,
     SerializerRegistry,
     RequestContextService,
+    SerializerService,
     TypeOrmQueryBuilderService,
     {
       provide: APP_INTERCEPTOR,
@@ -67,6 +64,9 @@ export interface JsonApiModuleOptions {
     },
   ],
   exports: [
+    AttributeProcessor,
+    RelationshipProcessor, 
+    IncludeProcessor,
     SerializerService, 
     SerializerRegistry, 
     RequestContextService,
