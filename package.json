@@ -1,5 +1,5 @@
 {
-  "name": "@foryourdev/nestjs-jsonapi",
+  "name": "@dev-jwshin/nestjs-jsonapi",
   "version": "1.0.0",
   "description": "JSON:API package for NestJS",
   "main": "dist/index.js",
