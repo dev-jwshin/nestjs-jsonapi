@@ -13,11 +13,11 @@ import { RequestContextService } from '../services/request-context.service';
 export class FiltersIncludesInterceptor implements NestInterceptor {
   constructor(
     private readonly reflector: Reflector,
-    private readonly requestContextService: RequestContextService,
   ) {}
 
   intercept(context: ExecutionContext, next: CallHandler): Observable<any> {
-    const request = this.requestContextService.get();
+    // 컨텍스트에서 직접 요청 객체 가져오기
+    const request = context.switchToHttp().getRequest();
     if (!request) {
       return next.handle();
     }

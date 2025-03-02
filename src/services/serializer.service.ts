@@ -1,25 +1,26 @@
-import { Injectable, Type, NotFoundException, BadRequestException } from '@nestjs/common';
+import { Injectable, Type, NotFoundException, BadRequestException, Inject, Optional } from '@nestjs/common';
 import 'reflect-metadata';
-import { RequestContextService } from './request-context.service';
 import { AttributeProcessor } from './attribute-processor.service';
 import { RelationshipProcessor } from './relationship-processor.service';
 import { IncludeProcessor } from './include-processor.service';
 import { SerializerRegistry } from './serializer-registry.service';
 import { SerializerOptions, ResourceObject, PaginationMeta, PaginationLinks } from '../interfaces/serializer.interface';
+import { REQUEST } from '@nestjs/core';
+import { Request } from 'express';
 
 @Injectable()
 export class SerializerService {
   constructor(
-    private readonly requestContextService: RequestContextService,
     private readonly attributeProcessor: AttributeProcessor,
     private readonly relationshipProcessor: RelationshipProcessor,
     private readonly includeProcessor: IncludeProcessor,
-    private readonly serializerRegistry: SerializerRegistry
+    private readonly serializerRegistry: SerializerRegistry,
+    @Optional() @Inject(REQUEST) private readonly request: Request
   ) {}
 
   // 자동으로 옵션을 가져오는 메서드
   getAutoOptions(existingOptions?: SerializerOptions): SerializerOptions {
-    const req = this.requestContextService.get();
+    const req = this.request;
     if (!req) {
       return existingOptions || {};
     }
@@ -28,8 +29,25 @@ export class SerializerService {
     
     this.processIncludeOptions(options, req);
     this.processFieldOptions(options, req);
-    this.processPaginationOptions(options, req);
     this.processSortOptions(options, req);
+    this.processPaginationOptions(options, req);
+    this.processFilterOptions(options, req);
+    
+    return options;
+  }
+
+  // 직접 요청 객체를 전달받는 메서드 (기존 코드와의 호환성 유지)
+  getOptionsFromRequest(req: any, existingOptions?: SerializerOptions): SerializerOptions {
+    if (!req) {
+      return existingOptions || {};
+    }
+    
+    const options: SerializerOptions = { ...existingOptions };
+    
+    this.processIncludeOptions(options, req);
+    this.processFieldOptions(options, req);
+    this.processSortOptions(options, req);
+    this.processPaginationOptions(options, req);
     this.processFilterOptions(options, req);
     
     return options;
@@ -484,7 +502,7 @@ export class SerializerService {
   
   // 현재 URL 가져오기
   private getCurrentUrl(): string {
-    const req = this.requestContextService.get();
+    const req = this.request;
     if (!req) return '';
     
     const protocol = req.protocol || 'http';
@@ -496,7 +514,7 @@ export class SerializerService {
   
   // 기본 URL 가져오기 (쿼리 스트링 없이)
   private getBaseUrl(): string {
-    const req = this.requestContextService.get();
+    const req = this.request;
     if (!req) return '';
     
     const protocol = req.protocol || 'http';
@@ -508,7 +526,7 @@ export class SerializerService {
   
   // 현재 쿼리 파라미터 가져오기
   private getCurrentQuery(): Record<string, string> {
-    const req = this.requestContextService.get();
+    const req = this.request;
     if (!req || !req.query) return {};
     
     const result: Record<string, string> = {};
