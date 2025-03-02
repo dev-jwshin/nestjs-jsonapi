@@ -175,11 +175,7 @@ function applyFilters(queryOptions: any, filters: any[]): void {
     if (typeof queryOptions.where === 'object' && !Array.isArray(queryOptions.where)) {
       switch (filter.operator) {
         case 'eq':
-          if (typeof filter.value === 'string') {
-            queryOptions.where[filter.field] = Like(`%${filter.value}%`);
-          } else {
-            queryOptions.where[filter.field] = filter.value;
-          }
+          queryOptions.where[filter.field] = filter.value;
           break;
         case 'like':
           queryOptions.where[filter.field] = Like(`%${filter.value}%`);

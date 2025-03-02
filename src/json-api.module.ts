@@ -55,6 +55,10 @@ export interface JsonApiModuleOptions {
     TypeOrmQueryBuilderService,
     {
       provide: APP_INTERCEPTOR,
+      useClass: RequestContextInterceptor,
+    },
+    {
+      provide: APP_INTERCEPTOR,
       useClass: JSONAPIResponseInterceptor,
     },
     {
@@ -64,10 +68,6 @@ export interface JsonApiModuleOptions {
     {
       provide: APP_INTERCEPTOR,
       useClass: IncludesInterceptor,
-    },
-    {
-      provide: APP_INTERCEPTOR,
-      useClass: RequestContextInterceptor,
     },
   ],
   exports: [
