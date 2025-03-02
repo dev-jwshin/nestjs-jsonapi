@@ -7,7 +7,8 @@ import { SerializerRegistry } from './services/serializer-registry.service';
 import { RequestContextService } from './services/request-context.service';
 import { APP_INTERCEPTOR } from '@nestjs/core';
 import { JSONAPIResponseInterceptor } from './interceptors/jsonapi-response.interceptor';
-import { FiltersIncludesInterceptor } from './interceptors/filters-includes.interceptor';
+import { FiltersInterceptor } from './interceptors/filters.interceptor';
+import { IncludesInterceptor } from './interceptors/includes.interceptor';
 import { TypeOrmQueryBuilderService } from './services/typeorm-query-builder.service';
 import { createJsonApiRepositoryProvider, JsonApiRepositoryOptions } from './providers/repository.factory';
 import { EntityClassOrSchema } from '@nestjs/typeorm/dist/interfaces/entity-class-or-schema.type';
@@ -63,7 +64,11 @@ export interface JsonApiModuleOptions {
     },
     {
       provide: APP_INTERCEPTOR,
-      useClass: FiltersIncludesInterceptor,
+      useClass: FiltersInterceptor,
+    },
+    {
+      provide: APP_INTERCEPTOR,
+      useClass: IncludesInterceptor,
     },
     {
       provide: APP_INTERCEPTOR,
@@ -110,28 +115,6 @@ export class JsonApiModule {
    * JSON:API 쿼리 파라미터가 자동으로 적용되는 엔티티 저장소 등록
    * @param entities 엔티티 클래스 배열 또는 엔티티 옵션 배열
    * @returns 동적 모듈 구성
-   * 
-   * @example
-   * // 기본 사용법 (모든 필터와 인클루드 허용)
-   * JsonApiModule.forFeature([User, Post])
-   * 
-   * // 엔티티별 상세 옵션 설정
-   * JsonApiModule.forFeature([
-   *   { 
-   *     entity: User, 
-   *     options: { 
-   *       allowedFilters: ['name', 'role'], 
-   *       allowedIncludes: ['profile', 'posts'] 
-   *     } 
-   *   },
-   *   { 
-   *     entity: Post,
-   *     options: {
-   *       allowedFilters: ['title', 'status'],
-   *       allowedIncludes: ['author', 'comments']
-   *     }
-   *   }
-   * ])
    */
   static forFeature(
     entities: (EntityClassOrSchema | EntityOptions)[]

@@ -176,6 +176,20 @@ function applyPagination(queryOptions: any, pagination: any): void {
 function filterSerializerOptions(options: any, repositoryOptions: JsonApiRepositoryOptions): any {
   const filteredOptions = { ...options };
   
+  // 허용된 필터 필드 필터링 추가
+  if (repositoryOptions.allowedFilters && filteredOptions.filter) {
+    const allowedFilters = repositoryOptions.allowedFilters;
+    const filteredFilters = {};
+    
+    Object.keys(filteredOptions.filter).forEach(key => {
+      if (allowedFilters.includes(key)) {
+        filteredFilters[key] = filteredOptions.filter[key];
+      }
+    });
+    
+    filteredOptions.filter = filteredFilters;
+  }
+  
   // 허용된 인클루드 필터링 유지
   if (repositoryOptions.allowedIncludes && filteredOptions.include) {
     const allowedIncludes = repositoryOptions.allowedIncludes;

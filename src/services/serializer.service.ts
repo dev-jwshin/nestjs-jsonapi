@@ -133,8 +133,13 @@ export class SerializerService {
 
   // 허용된 필터 필드만 유지
   private filterAllowedFilters(filters: Record<string, any>, allowedFilters: string[]): Record<string, any> {
-    // allowedFilters가 없으면 빈 객체 반환
-    if (!allowedFilters || allowedFilters.length === 0) {
+    // allowedFilters가 없으면 모든 필터 허용
+    if (!allowedFilters) {
+      return filters;
+    }
+
+    // allowedFilters가 비어있으면 모든 필터 제거
+    if (allowedFilters.length === 0) {
       return {};
     }
     
