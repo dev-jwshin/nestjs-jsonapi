@@ -38,4 +38,5 @@ export * from './providers/repository.factory';
 
 // 인터셉터
 export * from './interceptors/jsonapi-response.interceptor';
-export * from './interceptors/filters-includes.interceptor';
+export * from './interceptors/filters.interceptor';
+export * from './interceptors/includes.interceptor';

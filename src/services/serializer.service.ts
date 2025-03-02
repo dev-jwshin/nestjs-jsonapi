@@ -6,9 +6,13 @@ import { RelationshipProcessor } from './relationship-processor.service';
 import { IncludeProcessor } from './include-processor.service';
 import { SerializerRegistry } from './serializer-registry.service';
 import { SerializerOptions, ResourceObject, PaginationMeta, PaginationLinks } from '../interfaces/serializer.interface';
+import * as fs from 'fs';
+import * as path from 'path';
 
 @Injectable()
 export class SerializerService {
+  private readonly logFilePath = path.resolve(process.cwd(), 'debug.log');
+
   constructor(
     private readonly requestContextService: RequestContextService,
     private readonly attributeProcessor: AttributeProcessor,
@@ -16,6 +20,14 @@ export class SerializerService {
     private readonly includeProcessor: IncludeProcessor,
     private readonly serializerRegistry: SerializerRegistry
   ) {}
+
+  private logToFile(message: string): void {
+    try {
+      fs.appendFileSync(this.logFilePath, `${new Date().toISOString()} - ${message}\n`);
+    } catch (err) {
+      // 파일 로깅 실패 시 조용히 넘어갑니다
+    }
+  }
 
   // 자동으로 옵션을 가져오는 메서드
   getAutoOptions(existingOptions?: SerializerOptions): SerializerOptions {
@@ -109,14 +121,17 @@ export class SerializerService {
 
   // 필터 파라미터 처리
   private processFilterOptions(options: SerializerOptions, req: any): void {
+    this.logToFile('[SERIALIZER_SERVICE] Processing filter options');
     console.log('[SERIALIZER_SERVICE] Processing filter options');
     const filterParams = this.extractObjectParams(req.query, 'filter');
     
     if (Object.keys(filterParams).length === 0) {
+      this.logToFile('[SERIALIZER_SERVICE] No filter parameters found');
       console.log('[SERIALIZER_SERVICE] No filter parameters found');
       return;
     }
     
+    this.logToFile(`[SERIALIZER_SERVICE] Extracted filter params: ${JSON.stringify(filterParams)}`);
     console.log('[SERIALIZER_SERVICE] Extracted filter params:', filterParams);
     
     let filters = filterParams;
@@ -124,36 +139,44 @@ export class SerializerService {
     // 허용된 필터가 설정되어 있으면 필터링
     if (req['jsonapiAllowedFilters']) {
       const allowedFilters = req['jsonapiAllowedFilters'] as string[];
+      this.logToFile(`[SERIALIZER_SERVICE] Allowed filters from request: ${JSON.stringify(allowedFilters)}`);
       console.log('[SERIALIZER_SERVICE] Allowed filters from request:', allowedFilters);
       
       filters = this.filterAllowedFilters(filters, allowedFilters);
+      this.logToFile(`[SERIALIZER_SERVICE] Filtered filters result: ${JSON.stringify(filters)}`);
       console.log('[SERIALIZER_SERVICE] Filtered filters result:', filters);
       
       // 필터가 없는 경우 필터 옵션 자체를 설정하지 않음
       if (Object.keys(filters).length === 0) {
+        this.logToFile('[SERIALIZER_SERVICE] No filters remain after filtering');
         console.log('[SERIALIZER_SERVICE] No filters remain after filtering');
         return;
       }
     } else {
+      this.logToFile('[SERIALIZER_SERVICE] No allowed filters set in request');
       console.log('[SERIALIZER_SERVICE] No allowed filters set in request');
     }
     
     options.filter = filters;
+    this.logToFile(`[SERIALIZER_SERVICE] Final filters set in options: ${JSON.stringify(options.filter)}`);
     console.log('[SERIALIZER_SERVICE] Final filters set in options:', options.filter);
   }
 
   // 허용된 필터 필드만 유지
   private filterAllowedFilters(filters: Record<string, any>, allowedFilters: string[]): Record<string, any> {
+    this.logToFile(`[SERIALIZER_SERVICE] Filtering with allowed filters: ${JSON.stringify(allowedFilters)}`);
     console.log('[SERIALIZER_SERVICE] Filtering with allowed filters:', allowedFilters);
     
     // allowedFilters가 없으면 모든 필터 허용
     if (!allowedFilters) {
+      this.logToFile('[SERIALIZER_SERVICE] No allowed filters - allowing all');
       console.log('[SERIALIZER_SERVICE] No allowed filters - allowing all');
       return filters;
     }
 
     // allowedFilters가 비어있으면 모든 필터 제거
     if (allowedFilters.length === 0) {
+      this.logToFile('[SERIALIZER_SERVICE] Empty allowed filters - removing all');
       console.log('[SERIALIZER_SERVICE] Empty allowed filters - removing all');
       return {};
     }
@@ -162,9 +185,11 @@ export class SerializerService {
     
     Object.keys(filters).forEach(key => {
       if (allowedFilters.includes(key)) {
+        this.logToFile(`[SERIALIZER_SERVICE] Allowing filter: ${key}`);
         console.log(`[SERIALIZER_SERVICE] Allowing filter: ${key}`);
         filteredFilters[key] = filters[key];
       } else {
+        this.logToFile(`[SERIALIZER_SERVICE] Filtering out: ${key}`);
         console.log(`[SERIALIZER_SERVICE] Filtering out: ${key}`);
       }
     });

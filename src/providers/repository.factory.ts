@@ -6,6 +6,20 @@ import { buildQueryParams } from '../interfaces/query-builder.interface';
 import { EntityClassOrSchema } from '@nestjs/typeorm/dist/interfaces/entity-class-or-schema.type';
 import { Like, MoreThan, MoreThanOrEqual, LessThan, LessThanOrEqual, Not } from 'typeorm';
 import { RequestContextService } from '../services/request-context.service';
+import * as fs from 'fs';
+import * as path from 'path';
+
+// 로그 파일 경로
+const logFilePath = path.resolve(process.cwd(), 'debug.log');
+
+// 파일에 로그 기록
+function logToFile(message: string): void {
+  try {
+    fs.appendFileSync(logFilePath, `${new Date().toISOString()} - ${message}\n`);
+  } catch (err) {
+    // 파일 로깅 실패 시 조용히 넘어갑니다
+  }
+}
 
 /**
  * 모든 Repository 메서드 호출을 인터셉트하여 JSON:API 쿼리 파라미터를 자동으로 적용하는 팩토리
@@ -43,7 +57,9 @@ export function createJsonApiRepositoryProvider<T extends ObjectLiteral>(
           if (typeof originalValue === 'function' && methodsToWrap.includes(prop as string)) {
             return async function(...args: any[]) {
               // 디버깅: 메서드 실행 로그
-              console.log(`[DEBUG] Intercepting Repository method: ${String(prop)}`);
+              const message = `[DEBUG] Intercepting Repository method: ${String(prop)}`;
+              console.log(message);
+              logToFile(message);
               return wrapRepositoryMethod(originalValue, target, args, serializerService, requestContextService);
             };
           }
@@ -72,15 +88,25 @@ async function wrapRepositoryMethod<T>(
   const request = requestContextService.get();
   
   // 디버깅: 요청 컨텍스트 및 쿼리 로그
+  logToFile(`[DEBUG] Request context available: ${!!request}`);
   console.log('[DEBUG] Request context available:', !!request);
-  console.log('[DEBUG] Query parameters:', request?.query);
+  
+  if (request?.query) {
+    logToFile(`[DEBUG] Query parameters: ${JSON.stringify(request.query)}`);
+    console.log('[DEBUG] Query parameters:', request?.query);
+  }
   
   // 요청 객체에 설정된 허용된 필터 가져오기
   const allowedFilters = request && request['jsonapiAllowedFilters'];
   
   // 디버깅: 허용된 필터 로그
+  logToFile(`[DEBUG] Allowed filters: ${JSON.stringify(allowedFilters)}`);
   console.log('[DEBUG] Allowed filters:', allowedFilters);
-  console.log('[DEBUG] Serializer options filter:', serializerOptions.filter);
+  
+  if (serializerOptions.filter) {
+    logToFile(`[DEBUG] Serializer options filter: ${JSON.stringify(serializerOptions.filter)}`);
+    console.log('[DEBUG] Serializer options filter:', serializerOptions.filter);
+  }
   
   // 필터 제한이 설정된 경우 필터 적용
   if (allowedFilters && serializerOptions.filter) {
@@ -90,12 +116,14 @@ async function wrapRepositoryMethod<T>(
       if (allowedFilters.includes(key)) {
         filteredFilters[key] = serializerOptions.filter[key];
       } else {
+        logToFile(`[DEBUG] Filtering out non-allowed filter: ${key}`);
         console.log(`[DEBUG] Filtering out non-allowed filter: ${key}`);
       }
     });
     
     // 필터링된 필터로 교체
     serializerOptions.filter = filteredFilters;
+    logToFile(`[DEBUG] Filtered serializer options filter: ${JSON.stringify(serializerOptions.filter)}`);
     console.log('[DEBUG] Filtered serializer options filter:', serializerOptions.filter);
   }
   
@@ -103,12 +131,14 @@ async function wrapRepositoryMethod<T>(
   const { filters, sorts, pagination } = buildQueryParams(serializerOptions);
   
   // 디버깅: 최종 필터 로그
+  logToFile(`[DEBUG] Final filters after buildQueryParams: ${JSON.stringify(filters)}`);
   console.log('[DEBUG] Final filters after buildQueryParams:', filters);
   
   // 쿼리 옵션 생성 및 적용
   const queryOptions = createQueryOptions(args, filters, sorts, pagination);
   
   // 디버깅: 최종 쿼리 옵션 로그
+  logToFile(`[DEBUG] Final query options: ${JSON.stringify(queryOptions)}`);
   console.log('[DEBUG] Final query options:', JSON.stringify(queryOptions));
   
   // 원래 메서드 호출
