@@ -7,31 +7,12 @@ import { EntityClassOrSchema } from '@nestjs/typeorm/dist/interfaces/entity-clas
 import { Like, MoreThan, MoreThanOrEqual, LessThan, LessThanOrEqual, Not } from 'typeorm';
 
 /**
- * Repository 설정 옵션 인터페이스
- */
-export interface JsonApiRepositoryOptions {
-  /**
-   * 허용된 필터 필드 목록
-   * 지정하지 않으면 모든 필터가 허용됩니다.
-   */
-  allowedFilters?: string[];
-  
-  /**
-   * 허용된 인클루드 경로 목록
-   * 지정하지 않으면 모든 인클루드가 허용됩니다.
-   */
-  allowedIncludes?: string[];
-}
-
-/**
  * 모든 Repository 메서드 호출을 인터셉트하여 JSON:API 쿼리 파라미터를 자동으로 적용하는 팩토리
  * @param entity TypeORM 엔티티 클래스
- * @param options Repository 옵션 (허용된 필터, 인클루드 등)
  * @returns JSON:API 쿼리 파라미터가 자동으로 적용되는 Repository Provider
  */
 export function createJsonApiRepositoryProvider<T extends ObjectLiteral>(
   entity: EntityClassOrSchema,
-  options: JsonApiRepositoryOptions = {}
 ): FactoryProvider {
   return {
     provide: getRepositoryToken(entity),
@@ -49,7 +30,7 @@ export function createJsonApiRepositoryProvider<T extends ObjectLiteral>(
           
           if (typeof originalValue === 'function' && methodsToWrap.includes(prop as string)) {
             return async function(...args: any[]) {
-              return wrapRepositoryMethod(originalValue, target, args, serializerService, options);
+              return wrapRepositoryMethod(originalValue, target, args, serializerService);
             };
           }
           
@@ -67,17 +48,15 @@ async function wrapRepositoryMethod<T>(
   originalMethod: Function, 
   target: Repository<T>, 
   args: any[],
-  serializerService: SerializerService,
-  options: JsonApiRepositoryOptions
+  serializerService: SerializerService
 ) {
   // JSON:API 쿼리 파라미터 가져오기
   const serializerOptions = serializerService.getAutoOptions();
   
-  // 허용된 필터와 인클루드로 옵션 필터링
-  const filteredOptions = filterSerializerOptions(serializerOptions, options);
+  // 허용된 필터와 인클루드로 옵션 필터링 제거
   
-  // 쿼리 파라미터 빌드 - 컨트롤러 레벨 필터링 적용
-  const { filters, sorts, pagination } = buildQueryParams(filteredOptions);
+  // 쿼리 파라미터 빌드 - 컨트롤러 레벨 필터링만 적용
+  const { filters, sorts, pagination } = buildQueryParams(serializerOptions);
   
   // 쿼리 옵션 생성 및 적용
   const queryOptions = createQueryOptions(args, filters, sorts, pagination);
@@ -168,47 +147,4 @@ function applyPagination(queryOptions: any, pagination: any): void {
   
   queryOptions.skip = (pagination.page - 1) * pagination.perPage;
   queryOptions.take = pagination.perPage;
-}
-
-/**
- * SerializerOptions에서 허용된 필터와 인클루드만 추출
- */
-function filterSerializerOptions(options: any, repositoryOptions: JsonApiRepositoryOptions): any {
-  const filteredOptions = { ...options };
-  
-  // 허용된 필터 필드 필터링 추가
-  if (repositoryOptions.allowedFilters && filteredOptions.filter) {
-    const allowedFilters = repositoryOptions.allowedFilters;
-    const filteredFilters = {};
-    
-    Object.keys(filteredOptions.filter).forEach(key => {
-      if (allowedFilters.includes(key)) {
-        filteredFilters[key] = filteredOptions.filter[key];
-      }
-    });
-    
-    filteredOptions.filter = filteredFilters;
-  }
-  
-  // 허용된 인클루드 필터링 유지
-  if (repositoryOptions.allowedIncludes && filteredOptions.include) {
-    const allowedIncludes = repositoryOptions.allowedIncludes;
-    const originalIncludes = Array.isArray(filteredOptions.include) 
-      ? filteredOptions.include 
-      : filteredOptions.include.split(',');
-    
-    const filteredIncludes = originalIncludes.filter(include => {
-      const basePath = include.split('.')[0];
-      return allowedIncludes.some(allowed => 
-        allowed === include || 
-        allowed.startsWith(include + '.') || 
-        include.startsWith(allowed + '.') || 
-        allowed === basePath
-      );
-    });
-    
-    filteredOptions.include = filteredIncludes.join(',');
-  }
-  
-  return filteredOptions;
 } 

@@ -10,7 +10,7 @@ import { JSONAPIResponseInterceptor } from './interceptors/jsonapi-response.inte
 import { FiltersInterceptor } from './interceptors/filters.interceptor';
 import { IncludesInterceptor } from './interceptors/includes.interceptor';
 import { TypeOrmQueryBuilderService } from './services/typeorm-query-builder.service';
-import { createJsonApiRepositoryProvider, JsonApiRepositoryOptions } from './providers/repository.factory';
+import { createJsonApiRepositoryProvider } from './providers/repository.factory';
 import { EntityClassOrSchema } from '@nestjs/typeorm/dist/interfaces/entity-class-or-schema.type';
 import { RequestContextInterceptor } from './interceptors';
 
@@ -22,11 +22,6 @@ export interface EntityOptions {
    * TypeORM 엔티티 클래스
    */
   entity: EntityClassOrSchema;
-  
-  /**
-   * 해당 엔티티의 Repository 옵션
-   */
-  options?: JsonApiRepositoryOptions;
 }
 
 /**
@@ -140,7 +135,6 @@ export class JsonApiModule {
     if (typeof entityOption === 'object' && 'entity' in entityOption) {
       return createJsonApiRepositoryProvider(
         entityOption.entity, 
-        entityOption.options || {}
       );
     }
     
