@@ -12,6 +12,8 @@ export interface SerializerOptions {
     before?: string;
     // 총 개수를 응답에 포함할지 여부 (기본값: true)
     count?: boolean;
+    // 페이지네이션 활성화 여부
+    enabled?: boolean;
   };
   // 정렬
   sort?: Array<{
@@ -20,6 +22,8 @@ export interface SerializerOptions {
   }>;
   // 필터링
   filter?: Record<string, any>;
+  // 링크 정보
+  links?: Record<string, string>;
 }
 
 // 응답에 포함될 페이지네이션 메타 데이터

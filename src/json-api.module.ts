@@ -59,11 +59,7 @@ export interface JsonApiModuleOptions {
     TypeOrmQueryBuilderService,
     {
       provide: APP_INTERCEPTOR,
-      useFactory: (moduleRef: ModuleRef, moduleOptions?: any) => {
-        const interceptor = new JSONAPIResponseInterceptor(moduleRef, moduleOptions);
-        return interceptor;
-      },
-      inject: [ModuleRef, { token: 'JSONAPI_MODULE_OPTIONS', optional: true }]
+      useClass: JSONAPIResponseInterceptor,
     },
     {
       provide: APP_INTERCEPTOR,

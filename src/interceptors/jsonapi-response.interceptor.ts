@@ -1,12 +1,24 @@
-import { Injectable, NestInterceptor, ExecutionContext, CallHandler, Type, Inject, Optional } from '@nestjs/common';
+import { 
+  Injectable, 
+  NestInterceptor, 
+  ExecutionContext, 
+  CallHandler, 
+  Type, 
+  Optional, 
+  Inject,
+  NotFoundException,
+  BadRequestException
+} from '@nestjs/common';
+import { Reflector } from '@nestjs/core';
 import { Observable } from 'rxjs';
 import { map } from 'rxjs/operators';
-import { Reflector } from '@nestjs/core';
 import { SerializerService } from '../services/serializer.service';
-import { JSONAPI_RESPONSE_SERIALIZER } from '../decorators/response.decorator';
-import { SerializerOptions } from '../interfaces/serializer.interface';
-import { ModuleRef } from '@nestjs/core';
 import { SerializerRegistry } from '../services/serializer-registry.service';
+import { SerializerOptions } from '../interfaces/serializer.interface';
+import { Request } from 'express';
+import { REQUEST } from '@nestjs/core';
+import { ModuleRef } from '@nestjs/core';
+import { JSONAPI_RESPONSE_SERIALIZER } from '../decorators/response.decorator';
 
 @Injectable()
 export class JSONAPIResponseInterceptor implements NestInterceptor {
@@ -56,9 +68,6 @@ export class JSONAPIResponseInterceptor implements NestInterceptor {
   }
 
   intercept(context: ExecutionContext, next: CallHandler): Observable<any> {
-    // 인터셉터 실행 시마다 의존성 확인
-    this.ensureDependencies();
-    
     return next.handle().pipe(
       map(data => {
         try {
@@ -72,116 +81,35 @@ export class JSONAPIResponseInterceptor implements NestInterceptor {
   }
 
   /**
-   * 필요한 의존성이 모두 로드되었는지 확인하고 필요한 경우 로드 시도
-   */
-  private ensureDependencies(): void {
-    try {
-      // 첫 실행 시에만 의존성 로딩 시도 (로그 제한)
-      const shouldLog = !this._hasAttemptedLoading;
-      this._hasAttemptedLoading = true;
-      
-      if (!this.reflector && this.moduleRef) {
-        try {
-          if (shouldLog) console.log('Reflector 가져오기 시도 중...');
-          this.reflector = this.moduleRef.get(Reflector, { strict: false });
-          if (this.reflector && shouldLog) console.log('Reflector 로드 성공!');
-        } catch (error) {
-          if (shouldLog) console.error('Reflector 로드 실패:', error);
-        }
-      }
-      
-      if (!this.serializerService && this.moduleRef) {
-        try {
-          if (shouldLog) console.log('SerializerService 가져오기 시도 중...');
-          this.serializerService = this.moduleRef.get(SerializerService, { strict: false });
-          if (this.serializerService && shouldLog) console.log('SerializerService 로드 성공!');
-        } catch (error) {
-          if (shouldLog) console.error('SerializerService 로드 실패:', error);
-        }
-      }
-      
-      if (!this.serializerRegistry && this.moduleRef) {
-        try {
-          if (shouldLog) console.log('SerializerRegistry 가져오기 시도 중...');
-          this.serializerRegistry = this.moduleRef.get(SerializerRegistry, { strict: false });
-          if (this.serializerRegistry && shouldLog) console.log('SerializerRegistry 로드 성공!');
-        } catch (error) {
-          if (shouldLog) console.error('SerializerRegistry 로드 실패:', error);
-        }
-      }
-    } catch (error) {
-      console.error('의존성 확인 중 예상치 못한 오류 발생:', error);
-    }
-  }
-
-  /**
    * 응답 데이터 처리
    */
   private processResponse(context: ExecutionContext, data: any): any {
-    // 이미 처리된 응답이거나 처리가 필요 없는 경우 그대로 반환
+    // 처리를 건너뛰어야 하는 경우 확인
     if (this.shouldSkipProcessing(context, data)) {
       return data;
     }
 
-    try {
-      // 요청 객체 가져오기
-      const request = context.switchToHttp().getRequest();
-      
-      // 직렬화 옵션 가져오기
-      let responseOptions = this.getSerializerOptions(context);
-      
-      // 직렬화기가 없는 경우 기본 직렬화기 사용 시도
-      if (!responseOptions || !responseOptions.serializer) {
-        // 컨트롤러에서 직렬화기를 찾지 못한 경우 엔티티 타입을 추측
-        const entityType = this.guessEntityType(data);
-        
-        if (entityType) {
-          console.log('자동으로 감지된 엔티티 타입 사용:', entityType.name);
-          responseOptions = {
-            serializer: entityType
-          };
-        } else {
-          // 여전히 직렬화기를 찾지 못했다면 원본 데이터 반환
-          return data;
-        }
-      }
+    // 컨트롤러 메서드에서 JSON:API 응답 데코레이터 정보 가져오기
+    const handler = context.getHandler();
+    const responseOptions = this.reflector.get('jsonapi_response', handler);
+    
+    if (!responseOptions) {
+      // @JSONAPIResponse 데코레이터를 사용하지 않은 경우
+      return data;
+    }
+    
+    // null 또는 undefined인 경우 그대로 반환
+    if (data === null || data === undefined) {
+      return data;
+    }
 
-      // 페이지네이션 옵션 설정
+    try {
+      // 직렬화 옵션 구성
       const serializerOptions = this.buildSerializerOptions(context, responseOptions);
       
-      if (request) {
-        // 요청 객체를 serializerOptions에 넘겨서 처리할 수 있도록 함
-        serializerOptions.request = request;
-      }
-
-      // serializerService가 없으면 가져오기 시도
-      if (!this.serializerService && this.moduleRef) {
-        try {
-          console.log('SerializerService를 동적으로 가져오는 중...');
-          this.serializerService = this.moduleRef.get(SerializerService, { strict: false });
-        } catch (error) {
-          console.error('SerializerService 동적 로드 실패:', error);
-        }
-      }
-      
-      // serializerRegistry가 없으면 가져오기 시도
-      if (!this.serializerRegistry && this.moduleRef) {
-        try {
-          console.log('SerializerRegistry를 동적으로 가져오는 중...');
-          this.serializerRegistry = this.moduleRef.get(SerializerRegistry, { strict: false });
-        } catch (error) {
-          console.error('SerializerRegistry 동적 로드 실패:', error);
-        }
-      }
-      
-      // 여전히 serializerService가 정의되어 있지 않으면 원본 데이터 반환
-      if (!this.serializerService) {
-        console.error('serializerService가 정의되지 않았습니다. 직렬화를 적용할 수 없습니다.');
-        return data;
-      }
-      
+      // 직렬화기 등록 확인
       if (!this.serializerRegistry) {
-        console.error('serializerRegistry가 정의되지 않았습니다. 직렬화기를 등록할 수 없습니다.');
+        console.error('SerializerRegistry가 주입되지 않았습니다. JsonApiModule 설정을 확인하세요.');
         return data;
       }
 
@@ -189,46 +117,31 @@ export class JSONAPIResponseInterceptor implements NestInterceptor {
       this.serializerRegistry.registerByClassName(responseOptions.serializer);
 
       // 응답 직렬화
-      try {
-        return this.serializerService.serialize(
-          responseOptions.serializer,
-          data,
-          serializerOptions
-        );
-      } catch (error) {
-        console.error('JSON:API 직렬화 중 오류 발생:', error);
-        console.log('직렬화에 실패하여 원본 데이터를 반환합니다. JsonApiModule이 제대로 설정되었는지 확인하세요:');
-        console.log('app.module.ts에 다음과 같이 등록하세요:');
-        console.log(`
-          import { Module } from '@nestjs/common';
-          import { JsonApiModule } from '@foryourdev/nestjs-jsonapi';
-          
-          @Module({
-            imports: [
-              JsonApiModule.forRoot({
-                pagination: { enabled: true, size: 10 }
-              }),
-              // 다른 모듈...
-            ],
-          })
-          export class AppModule {}
-        `);
-        
-        return data;
-      }
+      return this.serializerService.serialize(
+        responseOptions.serializer,
+        data,
+        serializerOptions
+      );
     } catch (error) {
-      console.error('JSON:API 응답 처리 중 오류 발생:', error);
-      // 오류 발생 시에도 기본 JSON:API 형식으로 응답 시도
-      try {
-        return {
-          data: Array.isArray(data) 
-            ? data.map(item => this.createBasicResource(item))
-            : this.createBasicResource(data)
-        };
-      } catch (fallbackError) {
-        console.error('기본 JSON:API 응답 생성 실패:', fallbackError);
-        return data;
-      }
+      console.error('JSON:API 직렬화 중 오류 발생:', error);
+      console.log('직렬화에 실패하여 원본 데이터를 반환합니다. JsonApiModule이 제대로 설정되었는지 확인하세요:');
+      console.log('app.module.ts에 다음과 같이 등록하세요:');
+      console.log(`
+        import { Module } from '@nestjs/common';
+        import { JsonApiModule } from '@foryourdev/nestjs-jsonapi';
+        
+        @Module({
+          imports: [
+            JsonApiModule.forRoot({
+              pagination: { enabled: true, size: 10 }
+            }),
+            // 다른 모듈...
+          ],
+        })
+        export class AppModule {}
+      `);
+      
+      return data;
     }
   }
 
@@ -261,181 +174,108 @@ export class JSONAPIResponseInterceptor implements NestInterceptor {
   }
 
   /**
-   * 컨트롤러 메서드/클래스에서 직렬화 옵션 가져오기
-   */
-  private getSerializerOptions(context: ExecutionContext): any {
-    try {
-      // reflector가 초기화될 때까지 잠시 대기 (최대 5번 시도)
-      let retries = 0;
-      const maxRetries = 5;
-      let result = null;
-      
-      while (!result && retries < maxRetries) {
-        if (!this.reflector) {
-          console.warn(`JSON:API reflector 초기화 대기 중... (시도 ${retries + 1}/${maxRetries})`);
-          
-          // 동기적 처리를 위한 즉시 실행 함수
-          (() => {
-            try {
-              // 모듈 참조가 있으면 직접 가져오기 시도
-              if (this.moduleRef) {
-                this.reflector = this.moduleRef.get(Reflector, { strict: false });
-              }
-            } catch (e) {
-              console.warn('Reflector 가져오기 시도 중 오류:', e);
-            }
-          })();
-          
-          retries++;
-          
-          // 여전히 reflector가 없으면 null 반환
-          if (!this.reflector && retries >= maxRetries) {
-            console.error('JSON:API reflector를 초기화할 수 없습니다. 직렬화 적용이 불가능합니다.');
-            return null;
-          }
-          
-          continue;
-        }
-        
-        try {
-          // 컨트롤러 메서드에서 메타데이터 가져오기
-          const handler = context.getHandler();
-          const cls = context.getClass();
-          
-          if (!handler || !cls) {
-            console.warn('컨트롤러 핸들러 또는 클래스를 가져올 수 없습니다.');
-            return null;
-          }
-          
-          const methodOptions = this.reflector.get(
-            JSONAPI_RESPONSE_SERIALIZER,
-            handler,
-          );
-
-          // 컨트롤러 클래스에서 메타데이터 가져오기 (메서드에 없는 경우)
-          const classOptions = this.reflector.get(
-            JSONAPI_RESPONSE_SERIALIZER,
-            cls,
-          );
-
-          result = methodOptions || classOptions;
-          break;
-        } catch (error) {
-          console.warn('JSON:API 메타데이터 가져오기 실패:', error);
-          retries++;
-        }
-      }
-      
-      return result;
-    } catch (error) {
-      console.error('JSON:API 직렬화 옵션 가져오기 실패:', error);
-      return null;
-    }
-  }
-
-  /**
-   * 직렬화 옵션 빌드 (주로 페이지네이션 관련)
+   * 컨트롤러 메서드/클래스 옵션을 기반으로 직렬화 옵션을 구성합니다.
    */
   private buildSerializerOptions(context: ExecutionContext, responseOptions: any): SerializerOptions {
+    const request = context.switchToHttp().getRequest();
     const serializerOptions: SerializerOptions = {};
-
-    // 페이지네이션 옵션 적용
-    this.applyPaginationOptions(context, responseOptions, serializerOptions);
+    
+    // 필터링 처리
+    if (request.query && request.query.filter) {
+      serializerOptions.filter = {};
+      for (const key in request.query.filter) {
+        serializerOptions.filter[key] = request.query.filter[key];
+      }
+    }
+    
+    // 정렬 처리
+    if (request.query && request.query.sort) {
+      const sortFields = request.query.sort.split(',');
+      serializerOptions.sort = sortFields.map(field => {
+        if (field.startsWith('-')) {
+          return { field: field.substring(1), direction: 'desc' };
+        }
+        return { field, direction: 'asc' };
+      });
+    }
+    
+    // 페이지네이션 처리
+    if (
+      request.query && 
+      (request.query['page[number]'] || request.query['page[size]'])
+    ) {
+      serializerOptions.pagination = {
+        enabled: this.isPaginationEnabled(responseOptions),
+        number: request.query['page[number]'] ? parseInt(request.query['page[number]']) : 1,
+        size: request.query['page[size]'] ? 
+              parseInt(request.query['page[size]']) : 
+              this.getDefaultPageSize(responseOptions)
+      };
+    } else {
+      // 기본 페이지네이션 설정
+      serializerOptions.pagination = {
+        enabled: this.isPaginationEnabled(responseOptions),
+        size: this.getDefaultPageSize(responseOptions)
+      };
+    }
+    
+    // 인클루드 처리
+    if (request.query && request.query.include) {
+      serializerOptions.include = request.query.include.split(',');
+    }
+    
+    // 필드 필터링 처리
+    if (request.query) {
+      const fieldsEntries = Object.entries(request.query)
+        .filter(([key]) => key.startsWith('fields[') && key.endsWith(']'));
+      
+      if (fieldsEntries.length > 0) {
+        serializerOptions.fields = {};
+        
+        for (const [key, value] of fieldsEntries) {
+          const resourceType = key.substring(7, key.length - 1);
+          serializerOptions.fields[resourceType] = String(value).split(',');
+        }
+      }
+    }
     
     return serializerOptions;
   }
 
   /**
-   * 페이지네이션 옵션 적용
-   */
-  private applyPaginationOptions(
-    context: ExecutionContext, 
-    responseOptions: any, 
-    serializerOptions: SerializerOptions
-  ): void {
-    try {
-      // 페이지네이션 활성화 여부 확인
-      const paginationEnabled = this.isPaginationEnabled(responseOptions);
-      
-      // 페이지네이션이 비활성화되었으면 아무것도 하지 않음
-      if (!paginationEnabled) {
-        return;
-      }
-      
-      // 페이지네이션 파라미터 확인 시 예외 처리 추가
-      let requestHasPagination = false;
-      try {
-        requestHasPagination = this.requestHasPaginationParams(context);
-      } catch (error) {
-        console.warn('JSON:API 페이지네이션 파라미터 확인 실패:', error);
-      }
-      
-      if (!requestHasPagination) {
-        const defaultSize = this.getDefaultPageSize(responseOptions);
-        
-        serializerOptions.pagination = {
-          number: 1,
-          size: defaultSize,
-          count: true
-        };
-      }
-    } catch (error) {
-      console.warn('JSON:API 페이지네이션 옵션 적용 실패:', error);
-    }
-  }
-
-  /**
-   * 페이지네이션 활성화 여부 확인
+   * 페이지네이션이 활성화되어 있는지 확인합니다.
    */
   private isPaginationEnabled(responseOptions: any): boolean {
-    return (responseOptions.pagination?.enabled !== undefined)
-      ? responseOptions.pagination.enabled
-      : (this.moduleOptions?.pagination?.enabled !== undefined
-        ? this.moduleOptions.pagination.enabled
-        : true);
+    // 1. 응답 옵션의 pagination.enabled 확인
+    if (responseOptions.pagination?.enabled !== undefined) {
+      return responseOptions.pagination.enabled;
+    }
+    
+    // 2. 모듈 옵션의 pagination.enabled 확인
+    if (this.moduleOptions?.pagination?.enabled !== undefined) {
+      return this.moduleOptions.pagination.enabled;
+    }
+    
+    // 3. 기본값은 true
+    return true;
   }
 
   /**
-   * 기본 페이지 크기 가져오기
+   * 기본 페이지 크기를 반환합니다.
    */
   private getDefaultPageSize(responseOptions: any): number {
-    return responseOptions.pagination?.size || 
-      this.moduleOptions?.pagination?.size || 
-      10;
-  }
-  
-  /**
-   * 요청에 페이지네이션 파라미터가 있는지 확인
-   */
-  private requestHasPaginationParams(context: ExecutionContext): boolean {
-    try {
-      const request = context.switchToHttp().getRequest();
-      if (!request || !request.query) return false;
-      
-      const query = request.query;
-      
-      // Express에서 query parameter가 page[number]와 같은 형식으로 들어올 경우 처리
-      // 두 가지 가능한 형식 모두 확인: 
-      // 1. query.page?.number (객체 형태)
-      // 2. query['page[number]'] (문자열 키 형태)
-      return (
-        // 객체 형태로 파싱된 경우
-        (query.page && (
-          query.page.number !== undefined || 
-          query.page.size !== undefined ||
-          query.page.after !== undefined ||
-          query.page.before !== undefined
-        )) ||
-        // 문자열 키 형태로 존재하는 경우
-        query['page[number]'] !== undefined ||
-        query['page[size]'] !== undefined ||
-        query['page[after]'] !== undefined ||
-        query['page[before]'] !== undefined
-      );
-    } catch (error) {
-      // 오류 발생 시 false 반환
-      return false;
+    // 1. 응답 옵션의 pagination.size 확인
+    if (responseOptions.pagination?.size !== undefined) {
+      return responseOptions.pagination.size;
     }
+    
+    // 2. 모듈 옵션의 pagination.size 확인
+    if (this.moduleOptions?.pagination?.size !== undefined) {
+      return this.moduleOptions.pagination.size;
+    }
+    
+    // 3. 기본값은 10
+    return 10;
   }
 
   // 엔티티 타입 추측 (배열인 경우 첫 번째 항목을 기준으로)

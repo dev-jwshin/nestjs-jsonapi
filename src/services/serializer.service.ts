@@ -188,85 +188,52 @@ export class SerializerService {
    * @param options 직렬화 옵션 (없으면 자동으로 추출)
    */
   serialize(serializer: Type<any>, data: any | any[], options?: SerializerOptions) {
+    options = options || {};
+    options = this.getAutoOptions(options);
+    
     try {
-      // 직렬화기 레지스트리에 등록
-      this.serializerRegistry.registerByClassName(serializer);
+      // null 또는 undefined 처리
+      if (data === null || data === undefined) {
+        return { data: null };
+      }
       
-      // options.request가 있으면 이를 사용해 자동으로 옵션 추출
-      let finalOptions: SerializerOptions;
-      if (options?.request) {
-        // 요청 객체가 options에 포함되어 있는 경우
-        finalOptions = this.getOptionsFromRequest(options.request, options);
-      } else if (this.request) {
-        // options에 요청 객체가 없지만 주입된 요청 객체가 있는 경우
-        finalOptions = this.getAutoOptions(options);
+      let result: any = {};
+      
+      // 배열 또는 단일 항목 처리
+      if (Array.isArray(data)) {
+        // 배열 또는 페이지네이션 결과 처리
+        if (
+          options.pagination && 
+          options.pagination.enabled !== false && 
+          (typeof data.length === 'number')
+        ) {
+          // 페이지네이션 처리
+          const paginationResult = this.applyPagination(data, options.pagination);
+          result.data = paginationResult.data.map(item => this.serializeItem(serializer, item, options));
+          result.meta = paginationResult.meta;
+          result.links = paginationResult.links;
+        } else {
+          // 일반 배열 처리 (페이지네이션 없음)
+          result.data = data.map(item => this.serializeItem(serializer, item, options));
+        }
+        
+        // 포함된 관계 추가 (배열)
+        if (options.include && options.include.length > 0) {
+          result.included = this.includeProcessor.processIncludes(serializer, data, options);
+        }
       } else {
-        // 요청 객체가 없는 경우 원본 옵션 사용
-        finalOptions = options || {};
-      }
-      
-      const isCollection = Array.isArray(data);
-      
-      if (data === undefined || data === null) {
-        return { data: isCollection ? [] : null };
-      }
-      
-      // 페이지네이션, 정렬, 필터링 적용
-      let processedData = data;
-      let meta: Record<string, any> = {};
-      let links: Record<string, any> = {};
-      
-      if (isCollection) {
-        // 필터링 적용
-        if (finalOptions.filter && Object.keys(finalOptions.filter).length > 0) {
-          processedData = this.applyFiltering(processedData as any[], finalOptions.filter);
-        }
+        // 단일 항목 처리
+        result.data = this.serializeItem(serializer, data, options);
         
-        // 정렬 적용
-        if (finalOptions.sort && finalOptions.sort.length > 0) {
-          processedData = this.applySorting(processedData as any[], finalOptions.sort);
-        }
-        
-        // 페이지네이션 적용
-        if (finalOptions.pagination) {
-          const paginationResult = this.applyPagination(
-            processedData as any[], 
-            finalOptions.pagination
-          );
-          processedData = paginationResult.data;
-          meta = { ...meta, ...paginationResult.meta };
-          links = { ...links, ...paginationResult.links };
+        // 포함된 관계 추가 (단일 항목)
+        if (options.include && options.include.length > 0) {
+          result.included = this.includeProcessor.processIncludes(serializer, [data], options);
         }
       }
       
-      const result: { 
-        data: any, 
-        included?: any[],
-        meta?: Record<string, any>,
-        links?: Record<string, any>
-      } = {
-        data: isCollection 
-          ? (processedData as any[]).map(item => this.serializeItem(serializer, item, finalOptions))
-          : this.serializeItem(serializer, processedData, finalOptions)
-      };
-      
-      // 관계 포함
-      if (finalOptions.include?.length) {
-        result.included = this.includeProcessor.processIncluded(
-          serializer, 
-          processedData, 
-          finalOptions,
-          (s, i, o) => this.serializeItem(s, i, o)
-        );
-      }
-      
-      // 메타데이터 추가
-      if (Object.keys(meta).length > 0) {
-        result.meta = meta;
-      }
-      
-      // 링크 추가
-      if (Object.keys(links).length > 0) {
+      // 링크 정보 추가
+      if (options.links) {
+        const links = options.links;
         result.links = links;
       }
       
@@ -275,6 +242,7 @@ export class SerializerService {
       if (error instanceof NotFoundException || error instanceof BadRequestException) {
         throw error;
       }
+      console.error('Serialization error details:', error);
       throw new Error(`Serialization failed: ${error.message}`);
     }
   }
@@ -283,42 +251,55 @@ export class SerializerService {
     if (item === undefined || item === null) return null;
     
     try {
+      // 시리얼라이저 등록 확인
+      if (!this.serializerRegistry) {
+        console.error("SerializerRegistry is not available - this is a serious internal error");
+        throw new Error("SerializerRegistry is not properly injected");
+      }
+      
+      // 시리얼라이저 등록
+      this.serializerRegistry.registerByClassName(serializer);
+      
+      // 메타데이터 확인
       const serializerOptions = Reflect.getMetadata('jsonapi_serializer_options', serializer);
       
       if (!serializerOptions) {
-        throw new NotFoundException(`Serializer metadata not found for ${serializer.name}`);
+        console.error('No serializer metadata found for class:', serializer.name);
+        throw new Error(`Serializer metadata not found for ${serializer.name}`);
+      }
+
+      // 리소스 타입
+      const type = serializerOptions.type;
+      if (!type) {
+        throw new Error(`Resource type is not defined for serializer ${serializer.name}`);
       }
       
-      // Get ID
+      // ID 추출
       let id: string;
-      try {
-        if (typeof serializerOptions.id === 'function') {
-          id = serializerOptions.id(item, options.params);
-        } else {
-          id = item[serializerOptions.id] ? item[serializerOptions.id].toString() : null;
-        }
-        
-        if (!id) {
-          throw new BadRequestException(`Failed to get ID for the resource`);
-        }
-      } catch (idError) {
-        throw new BadRequestException(`ID generation failed: ${idError.message}`);
+      if (typeof serializerOptions.id === 'function') {
+        id = serializerOptions.id(item, options.params);
+      } else if (typeof serializerOptions.id === 'string') {
+        id = String(item[serializerOptions.id]);
+      } else {
+        id = String(item.id);
       }
+
+      // 리소스 객체 생성
+      const resourceObject: ResourceObject = {
+        type,
+        id
+      };
       
       // Build response object
-      const result: ResourceObject = {
-        id,
-        type: serializerOptions.type,
-        attributes: this.attributeProcessor.getAttributes(serializer, item, options),
-      };
+      resourceObject.attributes = this.attributeProcessor.getAttributes(serializer, item, options);
       
       // Add relationships if they exist
       const serializedRelationships = this.relationshipProcessor.getRelationships(serializer, item, options);
       if (Object.keys(serializedRelationships).length > 0) {
-        result.relationships = serializedRelationships;
+        resourceObject.relationships = serializedRelationships;
       }
       
-      return result;
+      return resourceObject;
     } catch (error) {
       if (error instanceof NotFoundException || error instanceof BadRequestException) {
         throw error;

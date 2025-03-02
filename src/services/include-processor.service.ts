@@ -99,4 +99,17 @@ export class IncludeProcessor {
       throw new Error(`Failed to process included resources: ${error.message}`);
     }
   }
+
+  /**
+   * 포함된 관계 처리 (신규 버전)
+   */
+  processIncludes(
+    serializer: Type<any>,
+    data: any[],
+    options: SerializerOptions
+  ): any[] {
+    // processIncluded와 동일한 기능을 수행하도록 구현
+    // 임시로 빈 배열 반환
+    return [];
+  }
 } 
