@@ -18,11 +18,11 @@ export class SerializerService {
   ) {}
 
   // 자동으로 옵션을 가져오는 메서드
-  getAutoOptions(): SerializerOptions {
+  getAutoOptions(existingOptions?: SerializerOptions): SerializerOptions {
     const req = this.requestContextService.get();
-    if (!req) return {};
+    if (!req) return existingOptions || {};
 
-    const options: SerializerOptions = {};
+    const options: SerializerOptions = { ...existingOptions };
     
     // include 파라미터 처리
     if (req.query.include) {
@@ -48,7 +48,7 @@ export class SerializerService {
     }
     
     // fields 파라미터 처리
-    options.fields = {};
+    options.fields = options.fields || {};
     Object.keys(req.query).forEach(key => {
       if (key.startsWith('fields[') && key.endsWith(']')) {
         const resourceType = key.slice(7, -1);
@@ -61,11 +61,12 @@ export class SerializerService {
     const pageParams = this.extractObjectParams(req.query, 'page');
     if (Object.keys(pageParams).length > 0) {
       options.pagination = {
-        number: pageParams.number ? parseInt(pageParams.number as string, 10) : undefined,
-        size: pageParams.size ? parseInt(pageParams.size as string, 10) : undefined,
-        after: pageParams.after as string,
-        before: pageParams.before as string,
-        count: pageParams.count ? pageParams.count === 'true' : true
+        ...options.pagination,
+        number: pageParams.number ? parseInt(pageParams.number as string, 10) : options.pagination?.number,
+        size: pageParams.size ? parseInt(pageParams.size as string, 10) : options.pagination?.size,
+        after: pageParams.after as string || options.pagination?.after,
+        before: pageParams.before as string || options.pagination?.before,
+        count: pageParams.count ? pageParams.count === 'true' : options.pagination?.count ?? true
       };
     }
     
@@ -144,7 +145,7 @@ export class SerializerService {
       this.serializerRegistry.registerByClassName(serializer);
       
       // 옵션이 제공되지 않았으면 자동으로 가져옴
-      const finalOptions = options || this.getAutoOptions();
+      const finalOptions = this.getAutoOptions(options);
       
       const isCollection = Array.isArray(data);
       

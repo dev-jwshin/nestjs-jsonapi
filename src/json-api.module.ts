@@ -27,6 +27,25 @@ export interface EntityOptions {
   options?: JsonApiRepositoryOptions;
 }
 
+/**
+ * 전역 JSON:API 옵션 인터페이스
+ */
+export interface JsonApiModuleOptions {
+  /**
+   * 페이지네이션 설정
+   */
+  pagination?: {
+    /**
+     * 페이지네이션 활성화 여부 (기본값: true)
+     */
+    enabled?: boolean;
+    /**
+     * 기본 페이지 크기 (기본값: 10)
+     */
+    size?: number;
+  };
+}
+
 @Global()
 @Module({
   providers: [
@@ -57,9 +76,21 @@ export class JsonApiModule {
   /**
    * 기본 모듈 설정
    */
-  static forRoot(): DynamicModule {
+  static forRoot(options: JsonApiModuleOptions = {}): DynamicModule {
     return {
       module: JsonApiModule,
+      providers: [
+        {
+          provide: 'JSONAPI_MODULE_OPTIONS',
+          useValue: {
+            pagination: {
+              enabled: options.pagination?.enabled !== undefined ? options.pagination.enabled : true,
+              size: options.pagination?.size || 10
+            }
+          }
+        }
+      ],
+      exports: ['JSONAPI_MODULE_OPTIONS']
     };
   }
 
