@@ -109,37 +109,52 @@ export class SerializerService {
 
   // 필터 파라미터 처리
   private processFilterOptions(options: SerializerOptions, req: any): void {
+    console.log('[SERIALIZER_SERVICE] Processing filter options');
     const filterParams = this.extractObjectParams(req.query, 'filter');
     
     if (Object.keys(filterParams).length === 0) {
+      console.log('[SERIALIZER_SERVICE] No filter parameters found');
       return;
     }
+    
+    console.log('[SERIALIZER_SERVICE] Extracted filter params:', filterParams);
     
     let filters = filterParams;
     
     // 허용된 필터가 설정되어 있으면 필터링
     if (req['jsonapiAllowedFilters']) {
       const allowedFilters = req['jsonapiAllowedFilters'] as string[];
+      console.log('[SERIALIZER_SERVICE] Allowed filters from request:', allowedFilters);
+      
       filters = this.filterAllowedFilters(filters, allowedFilters);
+      console.log('[SERIALIZER_SERVICE] Filtered filters result:', filters);
       
       // 필터가 없는 경우 필터 옵션 자체를 설정하지 않음
       if (Object.keys(filters).length === 0) {
+        console.log('[SERIALIZER_SERVICE] No filters remain after filtering');
         return;
       }
+    } else {
+      console.log('[SERIALIZER_SERVICE] No allowed filters set in request');
     }
     
     options.filter = filters;
+    console.log('[SERIALIZER_SERVICE] Final filters set in options:', options.filter);
   }
 
   // 허용된 필터 필드만 유지
   private filterAllowedFilters(filters: Record<string, any>, allowedFilters: string[]): Record<string, any> {
+    console.log('[SERIALIZER_SERVICE] Filtering with allowed filters:', allowedFilters);
+    
     // allowedFilters가 없으면 모든 필터 허용
     if (!allowedFilters) {
+      console.log('[SERIALIZER_SERVICE] No allowed filters - allowing all');
       return filters;
     }
 
     // allowedFilters가 비어있으면 모든 필터 제거
     if (allowedFilters.length === 0) {
+      console.log('[SERIALIZER_SERVICE] Empty allowed filters - removing all');
       return {};
     }
     
@@ -147,7 +162,10 @@ export class SerializerService {
     
     Object.keys(filters).forEach(key => {
       if (allowedFilters.includes(key)) {
+        console.log(`[SERIALIZER_SERVICE] Allowing filter: ${key}`);
         filteredFilters[key] = filters[key];
+      } else {
+        console.log(`[SERIALIZER_SERVICE] Filtering out: ${key}`);
       }
     });
     

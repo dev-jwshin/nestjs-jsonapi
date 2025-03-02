@@ -42,6 +42,8 @@ export function createJsonApiRepositoryProvider<T extends ObjectLiteral>(
           
           if (typeof originalValue === 'function' && methodsToWrap.includes(prop as string)) {
             return async function(...args: any[]) {
+              // 디버깅: 메서드 실행 로그
+              console.log(`[DEBUG] Intercepting Repository method: ${String(prop)}`);
               return wrapRepositoryMethod(originalValue, target, args, serializerService, requestContextService);
             };
           }
@@ -69,8 +71,16 @@ async function wrapRepositoryMethod<T>(
   // 현재 요청 컨텍스트 가져오기
   const request = requestContextService.get();
   
+  // 디버깅: 요청 컨텍스트 및 쿼리 로그
+  console.log('[DEBUG] Request context available:', !!request);
+  console.log('[DEBUG] Query parameters:', request?.query);
+  
   // 요청 객체에 설정된 허용된 필터 가져오기
   const allowedFilters = request && request['jsonapiAllowedFilters'];
+  
+  // 디버깅: 허용된 필터 로그
+  console.log('[DEBUG] Allowed filters:', allowedFilters);
+  console.log('[DEBUG] Serializer options filter:', serializerOptions.filter);
   
   // 필터 제한이 설정된 경우 필터 적용
   if (allowedFilters && serializerOptions.filter) {
@@ -79,18 +89,27 @@ async function wrapRepositoryMethod<T>(
     Object.keys(serializerOptions.filter).forEach(key => {
       if (allowedFilters.includes(key)) {
         filteredFilters[key] = serializerOptions.filter[key];
+      } else {
+        console.log(`[DEBUG] Filtering out non-allowed filter: ${key}`);
       }
     });
     
     // 필터링된 필터로 교체
     serializerOptions.filter = filteredFilters;
+    console.log('[DEBUG] Filtered serializer options filter:', serializerOptions.filter);
   }
   
   // 쿼리 파라미터 빌드 - 컨트롤러 레벨 필터링만 적용
   const { filters, sorts, pagination } = buildQueryParams(serializerOptions);
   
+  // 디버깅: 최종 필터 로그
+  console.log('[DEBUG] Final filters after buildQueryParams:', filters);
+  
   // 쿼리 옵션 생성 및 적용
   const queryOptions = createQueryOptions(args, filters, sorts, pagination);
+  
+  // 디버깅: 최종 쿼리 옵션 로그
+  console.log('[DEBUG] Final query options:', JSON.stringify(queryOptions));
   
   // 원래 메서드 호출
   return originalMethod.apply(target, queryOptions ? [queryOptions] : args);

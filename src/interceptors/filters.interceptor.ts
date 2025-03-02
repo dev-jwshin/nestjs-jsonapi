@@ -17,8 +17,11 @@ export class FiltersInterceptor implements NestInterceptor {
   intercept(context: ExecutionContext, next: CallHandler): Observable<any> {
     const request = this.requestContextService.get();
     if (!request) {
+      console.log('[FILTERS_INTERCEPTOR] Request context not available');
       return next.handle();
     }
+
+    console.log('[FILTERS_INTERCEPTOR] Processing request with query:', request.query);
 
     // 허용된 필터 설정을 요청 객체에 저장
     this.setAllowedFilters(context, request);
@@ -42,10 +45,15 @@ export class FiltersInterceptor implements NestInterceptor {
       context.getClass(),
     );
 
+    console.log('[FILTERS_INTERCEPTOR] Method level filters:', methodFilters);
+    console.log('[FILTERS_INTERCEPTOR] Class level filters:', classFilters);
+
     // 메서드 레벨 설정이 있으면 우선 사용, 없으면 클래스 레벨 설정 사용
     const allowedFilters = methodFilters || classFilters;
     
     // request 객체에 설정 저장 (추후 서비스에서 사용)
     request['jsonapiAllowedFilters'] = allowedFilters;
+    
+    console.log('[FILTERS_INTERCEPTOR] Set allowed filters:', allowedFilters);
   }
 } 
