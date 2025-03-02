@@ -192,8 +192,18 @@ export class SerializerService {
       // 직렬화기 레지스트리에 등록
       this.serializerRegistry.registerByClassName(serializer);
       
-      // 옵션이 제공되지 않았으면 자동으로 가져옴
-      const finalOptions = this.getAutoOptions(options);
+      // options.request가 있으면 이를 사용해 자동으로 옵션 추출
+      let finalOptions: SerializerOptions;
+      if (options?.request) {
+        // 요청 객체가 options에 포함되어 있는 경우
+        finalOptions = this.getOptionsFromRequest(options.request, options);
+      } else if (this.request) {
+        // options에 요청 객체가 없지만 주입된 요청 객체가 있는 경우
+        finalOptions = this.getAutoOptions(options);
+      } else {
+        // 요청 객체가 없는 경우 원본 옵션 사용
+        finalOptions = options || {};
+      }
       
       const isCollection = Array.isArray(data);
       

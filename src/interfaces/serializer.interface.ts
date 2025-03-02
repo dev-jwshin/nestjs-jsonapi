@@ -2,6 +2,8 @@ export interface SerializerOptions {
   include?: string[];
   fields?: Record<string, string[]>;
   params?: Record<string, any>;
+  // 요청 객체
+  request?: any;
   // 페이지네이션
   pagination?: {
     number?: number;

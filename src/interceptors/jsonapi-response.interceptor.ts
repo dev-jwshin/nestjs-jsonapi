@@ -37,16 +37,35 @@ export class JSONAPIResponseInterceptor implements NestInterceptor {
     }
 
     try {
+      // 요청 객체 가져오기
+      const request = context.switchToHttp().getRequest();
+      
       // 직렬화 옵션 가져오기
-      const responseOptions = this.getSerializerOptions(context);
-
-      // 직렬화기가 지정되지 않은 경우 원본 데이터 반환
+      let responseOptions = this.getSerializerOptions(context);
+      
+      // 직렬화기가 없는 경우 기본 직렬화기 사용 시도
       if (!responseOptions || !responseOptions.serializer) {
-        return data;
+        // 컨트롤러에서 직렬화기를 찾지 못한 경우 엔티티 타입을 추측
+        const entityType = this.guessEntityType(data);
+        
+        if (entityType) {
+          console.log('자동으로 감지된 엔티티 타입 사용:', entityType.name);
+          responseOptions = {
+            serializer: entityType
+          };
+        } else {
+          // 여전히 직렬화기를 찾지 못했다면 원본 데이터 반환
+          return data;
+        }
       }
 
       // 페이지네이션 옵션 설정
       const serializerOptions = this.buildSerializerOptions(context, responseOptions);
+      
+      if (request) {
+        // 요청 객체를 serializerOptions에 넘겨서 처리할 수 있도록 함
+        serializerOptions.request = request;
+      }
 
       // 응답 직렬화
       return this.serializerService.serialize(
@@ -56,7 +75,17 @@ export class JSONAPIResponseInterceptor implements NestInterceptor {
       );
     } catch (error) {
       console.error('JSON:API 응답 처리 중 오류 발생:', error);
-      return data; // 오류 발생 시 원본 데이터 반환
+      // 오류 발생 시에도 기본 JSON:API 형식으로 응답 시도
+      try {
+        return {
+          data: Array.isArray(data) 
+            ? data.map(item => this.createBasicResource(item))
+            : this.createBasicResource(data)
+        };
+      } catch (fallbackError) {
+        console.error('기본 JSON:API 응답 생성 실패:', fallbackError);
+        return data;
+      }
     }
   }
 
@@ -225,6 +254,54 @@ export class JSONAPIResponseInterceptor implements NestInterceptor {
     } catch (error) {
       // 오류 발생 시 false 반환
       return false;
+    }
+  }
+
+  // 엔티티 타입 추측 (배열인 경우 첫 번째 항목을 기준으로)
+  private guessEntityType(data: any): any {
+    if (!data) return null;
+    
+    try {
+      // 배열인 경우 첫 번째 항목 사용
+      const item = Array.isArray(data) ? data[0] : data;
+      
+      if (item && item.constructor && item.constructor.name) {
+        if (item.constructor.name !== 'Object') {
+          return item.constructor;
+        }
+      }
+    } catch (error) {
+      console.warn('엔티티 타입 추측 실패:', error);
+    }
+    
+    return null;
+  }
+  
+  // 기본 JSON:API 리소스 객체 생성
+  private createBasicResource(item: any): any {
+    if (!item) return null;
+    
+    try {
+      const id = item.id?.toString() || Math.random().toString(36).substring(2);
+      const type = item.constructor?.name?.toLowerCase() || 'resource';
+      
+      const attributes = {};
+      
+      // id를 제외한 모든 속성을 attributes에 추가
+      Object.keys(item).forEach(key => {
+        if (key !== 'id' && typeof item[key] !== 'function' && !Array.isArray(item[key])) {
+          attributes[key] = item[key];
+        }
+      });
+      
+      return {
+        id,
+        type,
+        attributes
+      };
+    } catch (error) {
+      console.warn('기본 리소스 객체 생성 실패:', error);
+      return { id: '0', type: 'unknown', attributes: {} };
     }
   }
 } 
