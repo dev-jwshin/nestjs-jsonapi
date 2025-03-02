@@ -165,24 +165,6 @@ The package supports both offset-based and cursor-based pagination:
 // GET /users?page[after]=lastId&page[size]=10
 ```
 
-## Documentation
-
-For more detailed documentation, examples, and advanced features, please visit our [wiki](https://github.com/yourusername/nestjs-jsonapi/wiki).
-
-## Contributing
-
-Contributions are welcome! Please feel free to submit a Pull Request.
-
-1. Fork the project
-2. Create your feature branch (`git checkout -b feature/amazing-feature`)
-3. Commit your changes (`git commit -m 'Add some amazing feature'`)
-4. Push to the branch (`git push origin feature/amazing-feature`)
-5. Open a Pull Request
-
-## License
-
-This project is licensed under the MIT License - see the LICENSE file for details.
-
 ## Author
 
 JunWon Shin <dev@foryourdev.com> 
