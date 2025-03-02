@@ -8,9 +8,23 @@ export class RequestContextService {
 
   set(request: Request): void {
     this.asyncLocalStorage.enterWith(request);
+    console.log('Request set:', {
+      url: request.url,
+      query: JSON.stringify(request.query),
+      method: request.method
+    });
   }
 
   get(): Request | undefined {
-    return this.asyncLocalStorage.getStore();
+    const request = this.asyncLocalStorage.getStore();
+    if (!request) {
+      console.log('Warning: No request context available');
+    } else {
+      console.log('Request context accessed:', {
+        url: request.url,
+        query: JSON.stringify(request.query)
+      });
+    }
+    return request;
   }
 } 

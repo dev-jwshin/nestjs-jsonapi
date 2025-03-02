@@ -89,17 +89,29 @@ async function wrapRepositoryMethod<T>(
   serializerService: SerializerService,
   options: JsonApiRepositoryOptions
 ) {
+  console.log('Repository method wrapped:', {
+    method: originalMethod.name,
+    args: JSON.stringify(args)
+  });
+  
   // JSON:API 쿼리 파라미터 가져오기
   const serializerOptions = serializerService.getAutoOptions();
+  console.log('SerializerOptions:', JSON.stringify(serializerOptions));
   
   // 허용된 필터와 인클루드로 옵션 필터링
   const filteredOptions = filterSerializerOptions(serializerOptions, options);
   
   // 쿼리 파라미터 빌드
   const { filters, sorts, pagination } = buildQueryParams(filteredOptions);
+  console.log('Built query params:', { 
+    filters: JSON.stringify(filters),
+    sorts: JSON.stringify(sorts),
+    pagination: JSON.stringify(pagination)
+  });
   
   // 쿼리 옵션 생성 및 적용
   const queryOptions = createQueryOptions(args, filters, sorts, pagination);
+  console.log('Final queryOptions:', JSON.stringify(queryOptions));
   
   // 원래 메서드 호출 (수정된 옵션으로)
   return originalMethod.apply(target, queryOptions ? [queryOptions] : args);
