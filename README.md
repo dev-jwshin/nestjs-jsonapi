@@ -217,52 +217,20 @@ The minus sign indicates descending order.
 The package supports handling JSON:API formatted request bodies, automatically transforming them into regular DTOs:
 
 ```typescript
-import { Controller, Post } from '@nestjs/common';
+import { Controller, Post, UsePipes, ValidationPipe } from '@nestjs/common';
 import { JsonApiResponse, JsonApiBody } from '@foryourdev/nestjs-jsonapi';
-import { UserService } from './user.service';
-import { UserSerializer } from './serializers/user.serializer';
 import { CreateUserDto } from './dto/create-user.dto';
 
 @Controller('users')
-export class UserController {
-  constructor(private userService: UserService) {}
+export class UsersController {
+  constructor(private readonly usersService: UsersService) {}
 
   @Post()
-  @JsonApiResponse(UserSerializer)
+  @UsePipes(new ValidationPipe({ transform: true, whitelist: true }))
   async create(@JsonApiBody('users') createUserDto: CreateUserDto) {
-    // createUserDto is transformed from JSON:API format to a regular DTO
-    return this.userService.create(createUserDto);
+    // createUserDto is transformed and validated through ValidationPipe
+    return this.usersService.create(createUserDto);
   }
-}
-```
-
-Clients can send requests in JSON:API format:
-
-```json
-{
-  "data": {
-    "type": "users",
-    "attributes": {
-      "name": "John Doe",
-      "email": "john@example.com"
-    },
-    "relationships": {
-      "role": {
-        "data": { "type": "roles", "id": "1" }
-      }
-    }
-  }
-}
-```
-
-The `@JsonApiBody` decorator will transform this into a standard DTO structure:
-
-```typescript
-{
-  name: "John Doe",
-  email: "john@example.com",
-  role: "1",
-  _type: "users"
 }
 ```
 
@@ -338,6 +306,50 @@ The `@JsonApiBody()` decorator transforms the JSON:API request into a plain obje
   "phone": "01012345678"
 }
 ```
+
+#### Resource Type Handling
+
+When using the `@JsonApiBody()` decorator, you have two options for specifying the resource type:
+
+1. **Explicitly in the decorator**: `@JsonApiBody('users')` - This takes precedence over the request body's type
+2. **From the request body**: If you use `@JsonApiBody()` without arguments, the type will be taken from the `data.type` property in the JSON:API request
+
+Note that you must specify the resource type in at least one of these ways. If both are missing, the decorator will throw a `BadRequestException`.
+
+```typescript
+// Option 1: Type specified in decorator (preferred)
+@Post()
+async create(@JsonApiBody('users') dto: CreateUserDto) {
+  // ...
+}
+
+// Option 2: Type taken from request body
+@Post()
+async create(@JsonApiBody() dto: CreateUserDto) {
+  // Request must include "type": "users" in the data object
+  // ...
+}
+```
+
+#### Controlling the `_type` Property
+
+By default, the transformed object does not include the `_type` property. If you need to preserve the resource type from the JSON:API request, you can set the `preserveType` option to `true`:
+
+```typescript
+// Keep the _type property in the transformed object
+@Post()
+async create(@JsonApiBody({ resourceType: 'users', preserveType: true }) dto: CreateUserDto) {
+  // dto will include the _type property
+  // ...
+}
+```
+
+The `_type` property can be useful when:
+- You need to know the original resource type in your service logic
+- You're building responses that need to be converted back to JSON:API format
+- You're working with polymorphic resources
+
+For most use cases, especially with ValidationPipe and DTOs, you won't need the `_type` property.
 
 You can also access the raw JSON:API request using the `RawJsonApiBody` decorator:
 
