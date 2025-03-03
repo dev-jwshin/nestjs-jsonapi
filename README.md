@@ -266,6 +266,79 @@ The `@JsonApiBody` decorator will transform this into a standard DTO structure:
 }
 ```
 
+### Using with ValidationPipe
+
+The `@JsonApiBody()` decorator works seamlessly with NestJS's ValidationPipe, allowing you to validate transformed JSON:API requests using class-validator decorators on your DTOs.
+
+#### Controller Setup
+
+```typescript
+import { Controller, Post, UsePipes, ValidationPipe } from '@nestjs/common';
+import { JsonApiResponse, JsonApiBody } from '@foryourdev/nestjs-jsonapi';
+import { CreateUserDto } from './dto/create-user.dto';
+
+@Controller('users')
+export class UsersController {
+  constructor(private readonly usersService: UsersService) {}
+
+  @Post()
+  @UsePipes(new ValidationPipe({ transform: true, whitelist: true }))
+  async create(@JsonApiBody('users') createUserDto: CreateUserDto) {
+    // createUserDto is transformed and validated through ValidationPipe
+    return this.usersService.create(createUserDto);
+  }
+}
+```
+
+#### DTO Class Definition
+
+```typescript
+import { IsEmail, IsNotEmpty, IsString, MinLength } from 'class-validator';
+
+export class CreateUserDto {
+  @IsNotEmpty()
+  @IsString()
+  name: string;
+
+  @IsEmail()
+  email: string;
+
+  @IsString()
+  @MinLength(8)
+  password: string;
+
+  @IsString()
+  phone: string;
+}
+```
+
+#### JSON:API Request Example
+
+```json
+{
+  "data": {
+    "type": "users",
+    "attributes": {
+      "name": "Test User",
+      "email": "test@example.com",
+      "password": "password123",
+      "phone": "01012345678"
+    }
+  }
+}
+```
+
+The `@JsonApiBody()` decorator transforms the JSON:API request into a plain object, and ValidationPipe then validates it against your DTO class:
+
+```json
+{
+  "name": "Test User",
+  "email": "test@example.com",
+  "password": "password123",
+  "phone": "01012345678"
+}
+```
+
 You can also access the raw JSON:API request using the `RawJsonApiBody` decorator:
 
 ```typescript

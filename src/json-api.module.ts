@@ -16,7 +16,6 @@ import { RequestContextInterceptor } from './interceptors';
 import { JsonApiRequestTransformerService } from './services/jsonapi-request-transformer.service';
 import { JsonApiRequestPipe } from './pipes/jsonapi-request.pipe';
 import { JsonApiExceptionFilter } from './errors/json-api-exception.filter';
-import { JsonApiBodyInterceptor } from './decorators/jsonapi-body.decorator';
 
 /**
  * 엔티티별 JSON:API 옵션 인터페이스
@@ -80,10 +79,6 @@ export interface JsonApiModuleOptions {
     {
       provide: APP_INTERCEPTOR,
       useClass: IncludesInterceptor,
-    },
-    {
-      provide: APP_INTERCEPTOR,
-      useClass: JsonApiBodyInterceptor,
     },
   ],
   exports: [
