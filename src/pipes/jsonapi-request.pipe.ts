@@ -1,6 +1,7 @@
 import { PipeTransform, Injectable, ArgumentMetadata, BadRequestException } from '@nestjs/common';
 import { JsonApiRequest } from '../interfaces/jsonapi-request.interface';
 import { JsonApiRequestTransformerService } from '../services/jsonapi-request-transformer.service';
+import { plainToInstance } from 'class-transformer';
 
 @Injectable()
 export class JsonApiRequestPipe implements PipeTransform {
@@ -24,8 +25,15 @@ export class JsonApiRequestPipe implements PipeTransform {
     const resourceType = metadata.metatype?.prototype?.resourceType;
     
     // 변환 실행 - 결과는 일반 객체 형태로 반환됨
-    // 이후 ValidationPipe가 이 객체를 DTO 클래스 인스턴스로 변환하고 유효성 검사를 수행함
-    return this.transformerService.transformRequest(value, resourceType);
+    const transformedData = this.transformerService.transformRequest(value, resourceType);
+    
+    // 메타타입이 존재하면(DTO 클래스가 지정되어 있으면) 해당 클래스의 인스턴스로 변환
+    if (metadata.metatype) {
+      return plainToInstance(metadata.metatype, transformedData);
+    }
+    
+    // 그렇지 않으면 변환된 일반 객체 반환
+    return transformedData;
   }
 
   /**
