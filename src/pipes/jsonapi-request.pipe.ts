@@ -23,7 +23,8 @@ export class JsonApiRequestPipe implements PipeTransform {
     // 변환 옵션 설정
     const resourceType = metadata.metatype?.prototype?.resourceType;
     
-    // 변환 실행
+    // 변환 실행 - 결과는 일반 객체 형태로 반환됨
+    // 이후 ValidationPipe가 이 객체를 DTO 클래스 인스턴스로 변환하고 유효성 검사를 수행함
     return this.transformerService.transformRequest(value, resourceType);
   }
 
