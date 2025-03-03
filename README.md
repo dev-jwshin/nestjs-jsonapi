@@ -141,6 +141,7 @@ export class UserController {
 | `@AllowedFilters(fields)` | Method decorator that specifies which fields can be filtered |
 | `@AllowedIncludes(relationships)` | Method decorator that specifies which relationships can be included |
 | `@JsonApiBody(type)` | Parameter decorator that transforms JSON:API request bodies to DTOs |
+| `@JsonApiBodyWithValidation(type, validationPipeOptions)` | Parameter decorator that combines JSON:API body transformation with ValidationPipe |
 | `@RawJsonApiBody()` | Parameter decorator that provides access to the raw JSON:API request |
 
 ### Advanced Usage
@@ -217,7 +218,7 @@ The minus sign indicates descending order.
 The package supports handling JSON:API formatted request bodies, automatically transforming them into regular DTOs:
 
 ```typescript
-import { Controller, Post, UsePipes, ValidationPipe } from '@nestjs/common';
+import { Controller, Post } from '@nestjs/common';
 import { JsonApiResponse, JsonApiBody } from '@foryourdev/nestjs-jsonapi';
 import { CreateUserDto } from './dto/create-user.dto';
 
@@ -226,9 +227,8 @@ export class UsersController {
   constructor(private readonly usersService: UsersService) {}
 
   @Post()
-  @UsePipes(new ValidationPipe({ transform: true, whitelist: true }))
   async create(@JsonApiBody('users') createUserDto: CreateUserDto) {
-    // createUserDto is transformed and validated through ValidationPipe
+    // createUserDto is transformed
     return this.usersService.create(createUserDto);
   }
 }
@@ -236,9 +236,9 @@ export class UsersController {
 
 ### Using with ValidationPipe
 
-The `@JsonApiBody()` decorator works seamlessly with NestJS's ValidationPipe, allowing you to validate transformed JSON:API requests using class-validator decorators on your DTOs.
+The package provides two ways to validate transformed JSON:API requests:
 
-#### Controller Setup
+#### Option 1: Using @JsonApiBody with UsePipes
 
 ```typescript
 import { Controller, Post, UsePipes, ValidationPipe } from '@nestjs/common';
@@ -257,6 +257,38 @@ export class UsersController {
   }
 }
 ```
+
+#### Option 2: Using @JsonApiBodyWithValidation (Recommended)
+
+For convenience, the package provides a combined decorator that handles both transformation and validation in one step:
+
+```typescript
+import { Controller, Post } from '@nestjs/common';
+import { JsonApiResponse, JsonApiBodyWithValidation } from '@foryourdev/nestjs-jsonapi';
+import { CreateUserDto } from './dto/create-user.dto';
+
+@Controller('users')
+export class UsersController {
+  constructor(private readonly usersService: UsersService) {}
+
+  @Post()
+  async create(
+    @JsonApiBodyWithValidation('users', { transform: true, whitelist: true })
+    createUserDto: CreateUserDto
+  ) {
+    // createUserDto is transformed and validated in one step
+    return this.usersService.create(createUserDto);
+  }
+}
+```
+
+The `@JsonApiBodyWithValidation` decorator accepts the following parameters:
+- `options`: Either a string specifying the resource type or an object with options:
+  - `resourceType`: The JSON:API resource type
+  - `preserveType`: Whether to keep the _type property in the transformed object
+- `validationPipeOptions`: Options for the NestJS ValidationPipe (default: `{ transform: true, whitelist: true }`)
+
+This decorator combines the JSON:API body transformation with NestJS's ValidationPipe, making your code cleaner and easier to maintain.
 
 #### DTO Class Definition
 
@@ -296,7 +328,7 @@ export class CreateUserDto {
 }
 ```
 
-The `@JsonApiBody()` decorator transforms the JSON:API request into a plain object, and ValidationPipe then validates it against your DTO class:
+The `@JsonApiBodyWithValidation()` decorator transforms the JSON:API request into a plain object and validates it against your DTO class:
 
 ```json
 {
@@ -309,23 +341,23 @@ The `@JsonApiBody()` decorator transforms the JSON:API request into a plain obje
 
 #### Resource Type Handling
 
-When using the `@JsonApiBody()` decorator, you have two options for specifying the resource type:
+When using the `@JsonApiBodyWithValidation()` decorator, you have two options for specifying the resource type:
 
-1. **Explicitly in the decorator**: `@JsonApiBody('users')` - This takes precedence over the request body's type
-2. **From the request body**: If you use `@JsonApiBody()` without arguments, the type will be taken from the `data.type` property in the JSON:API request
+1. **Explicitly in the decorator**: `@JsonApiBodyWithValidation('users')` - This takes precedence over the request body's type
+2. **From the request body**: If you use `@JsonApiBodyWithValidation()` without arguments, the type will be taken from the `data.type` property in the JSON:API request
 
 Note that you must specify the resource type in at least one of these ways. If both are missing, the decorator will throw a `BadRequestException`.
 
 ```typescript
 // Option 1: Type specified in decorator (preferred)
 @Post()
-async create(@JsonApiBody('users') dto: CreateUserDto) {
+async create(@JsonApiBodyWithValidation('users') dto: CreateUserDto) {
   // ...
 }
 
 // Option 2: Type taken from request body
 @Post()
-async create(@JsonApiBody() dto: CreateUserDto) {
+async create(@JsonApiBodyWithValidation() dto: CreateUserDto) {
   // Request must include "type": "users" in the data object
   // ...
 }
@@ -338,18 +370,14 @@ By default, the transformed object does not include the `_type` property. If you
 ```typescript
 // Keep the _type property in the transformed object
 @Post()
-async create(@JsonApiBody({ resourceType: 'users', preserveType: true }) dto: CreateUserDto) {
+async create(
+  @JsonApiBodyWithValidation({ resourceType: 'users', preserveType: true })
+  dto: CreateUserDto
+) {
   // dto will include the _type property
   // ...
 }
 ```
-
-The `_type` property can be useful when:
-- You need to know the original resource type in your service logic
-- You're building responses that need to be converted back to JSON:API format
-- You're working with polymorphic resources
-
-For most use cases, especially with ValidationPipe and DTOs, you won't need the `_type` property.
 
 You can also access the raw JSON:API request using the `RawJsonApiBody` decorator:
 
