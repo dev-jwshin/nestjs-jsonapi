@@ -17,7 +17,7 @@ export class JsonApiExceptionFilter implements ExceptionFilter {
     
     // Default to a 500 internal server error if not an HttpException
     let status = 500;
-    let errorResponse: { errors: Array<{ status: string; title: string; detail?: string }> } = {
+    let errorResponse: { errors: Array<{ status: string; title: string; detail?: string; source?: any }> } = {
       errors: [
         {
           status: '500',
@@ -42,15 +42,42 @@ export class JsonApiExceptionFilter implements ExceptionFilter {
         const message = (exceptionResponse as any).message || 'An error occurred';
         const detail = (exceptionResponse as any).error || null;
         
-        errorResponse = {
-          errors: [
-            {
-              status: status.toString(),
-              title: Array.isArray(message) ? message[0] : message,
-              ...(detail && { detail }),
-            }
-          ]
-        };
+        if (Array.isArray(message)) {
+          // 유효성 검사 오류가 배열인 경우 모든 오류를 포함
+          errorResponse = {
+            errors: message.map(msg => {
+              // 유효성 검사 오류 메시지에서 필드 정보 추출 시도
+              let source = undefined;
+              let title = msg;
+              
+              // class-validator 오류 메시지에서 필드 정보 추출 시도
+              // 일반적인 형식: "property [fieldName] message"
+              const propertyMatch = msg.match(/^([a-zA-Z0-9_]+) (.+)$/);
+              if (propertyMatch) {
+                source = { pointer: `/data/attributes/${propertyMatch[1]}` };
+                title = propertyMatch[2];
+              }
+              
+              return {
+                status: status.toString(),
+                title: title,
+                ...(source && { source }),
+                ...(detail && { detail }),
+              };
+            })
+          };
+        } else {
+          // 단일 오류 메시지인 경우
+          errorResponse = {
+            errors: [
+              {
+                status: status.toString(),
+                title: message,
+                ...(detail && { detail }),
+              }
+            ]
+          };
+        }
       } else {
         errorResponse = {
           errors: [
